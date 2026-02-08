@@ -373,6 +373,17 @@ describe("AgentRuntime APIs", () => {
     expect(json.error.code).toBe("DOMAIN_NOT_ALLOWED");
   });
 
+  it("rejects session ensure outside runtime allowlist", async () => {
+    const { response, json } = await postJson(`${ctx.coreUrl}/session/ensure`, {
+      tabUrl: "http://evil.local/page",
+      debugPort: 9222,
+      reuseActive: true,
+    });
+
+    expect(response.status).toBe(403);
+    expect(json.error.code).toBe("DOMAIN_NOT_ALLOWED");
+  });
+
   it("runs compare-reference command and writes standardized artifact bundle", async () => {
     const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference");
     fs.mkdirSync(fixturesDir, { recursive: true });
@@ -424,6 +435,30 @@ describe("AgentRuntime APIs", () => {
     expect(metricsPayload.diffPixels).toBe(1);
   });
 
+  it("runs compare-reference command without explicit sessionId", async () => {
+    const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference-no-session");
+    fs.mkdirSync(fixturesDir, { recursive: true });
+
+    const actualPath = path.join(fixturesDir, "actual.png");
+    const referencePath = path.join(fixturesDir, "reference.png");
+    writePng(actualPath, 2, 2, () => [255, 255, 255, 255]);
+    writePng(referencePath, 2, 2, () => [255, 255, 255, 255]);
+
+    const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+      command: "compare-reference",
+      payload: {
+        actualImagePath: actualPath,
+        referenceImagePath: referencePath,
+        label: "no-session-id",
+        writeDiff: true,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.result.metrics.diffPixels).toBe(0);
+  });
+
   it("returns detailed compare-reference errors for missing file, invalid format, and dimension mismatch", async () => {
     const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference-errors");
     fs.mkdirSync(fixturesDir, { recursive: true });
@@ -469,7 +504,22 @@ describe("AgentRuntime APIs", () => {
     expect(mismatchJson.error.code).toBe("IMAGE_DIMENSION_MISMATCH");
   });
 
-  it("returns CDP_UNAVAILABLE for webgl-diagnostics when no CDP target is attached", async () => {
+  it("returns SESSION_NOT_FOUND with nextAction for command without session context", async () => {
+    const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+      command: "reload",
+      payload: {
+        waitUntil: "load",
+        timeoutMs: 5000,
+      },
+    });
+
+    expect(response.status).toBe(404);
+    expect(json.error.code).toBe("SESSION_NOT_FOUND");
+    expect(json.error.nextAction).toBe("ensure-session");
+    expect(json.error.details.activeSessionId).toBeNull();
+  });
+
+  it("returns SESSION_NOT_FOUND for webgl-diagnostics when no active session exists", async () => {
     const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
       sessionId: "webgl-diagnostics-session",
       command: "webgl-diagnostics",
@@ -478,7 +528,7 @@ describe("AgentRuntime APIs", () => {
       },
     });
 
-    expect(response.status).toBe(503);
-    expect(json.error.code).toBe("CDP_UNAVAILABLE");
+    expect(response.status).toBe(404);
+    expect(json.error.code).toBe("SESSION_NOT_FOUND");
   });
 });

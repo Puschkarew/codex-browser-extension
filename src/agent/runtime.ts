@@ -2,6 +2,8 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { FastifyInstance, FastifyReply } from "fastify";
 import path from "node:path";
 import {
+  EvaluatePayloadSchema,
+  NavigatePayloadSchema,
   ClickPayloadSchema,
   CompareReferencePayloadSchema,
   CommandRequestSchema,
@@ -12,10 +14,12 @@ import {
   ProjectRuntimeConfigSchema,
   QueryRequestSchema,
   ReloadPayloadSchema,
+  SessionEnsureRequestSchema,
   SessionStartRequestSchema,
   SessionStopRequestSchema,
   SnapshotPayloadSchema,
   TypePayloadSchema,
+  WaitPayloadSchema,
   WebglDiagnosticsPayloadSchema,
 } from "../shared/contracts.js";
 import { CdpController, CdpUnavailableError, CommandTimeoutError, TargetNotFoundError } from "./cdp-controller.js";
@@ -59,11 +63,14 @@ function sendError(
   code: string,
   message: string,
   details?: unknown,
+  nextAction: string | null = null,
 ): FastifyReply {
   return reply.code(statusCode).send({
     error: {
       code,
       message,
+      reason: message,
+      nextAction,
       details: details ?? {},
     },
   });
@@ -163,6 +170,7 @@ export class AgentRuntime {
       bodyLimit: 32_768,
     });
 
+    this.registerServerErrorHandlers();
     this.registerCoreRoutes();
     this.registerDebugRoutes();
   }
@@ -202,6 +210,185 @@ export class AgentRuntime {
 
     await this.cdpController.detach();
     await Promise.all([this.coreServer.close(), this.debugServer.close()]);
+  }
+
+  private registerServerErrorHandlers(): void {
+    const setHandler = (server: FastifyInstance, serverId: "core" | "debug") => {
+      server.setErrorHandler((error, _request, reply) => {
+        server.log.error(error);
+        if (reply.sent) {
+          return;
+        }
+        sendError(
+          reply,
+          500,
+          "INTERNAL_ERROR",
+          "Unhandled server error",
+          {
+            server: serverId,
+            reason: error?.message ?? String(error),
+          },
+          "check-agent-log",
+        );
+      });
+    };
+
+    setHandler(this.coreServer, "core");
+    setHandler(this.debugServer, "debug");
+  }
+
+  private activeSessionDetails(): {
+    activeSessionId: string | null;
+    activeState: string | null;
+    activeTabUrl: string | null;
+  } {
+    const active = this.sessionManager.getActive();
+    if (!active) {
+      return {
+        activeSessionId: null,
+        activeState: null,
+        activeTabUrl: null,
+      };
+    }
+    return {
+      activeSessionId: active.sessionId,
+      activeState: active.state,
+      activeTabUrl: active.attachedTargetUrl ?? active.tabUrl,
+    };
+  }
+
+  private sendSessionNotFound(
+    reply: FastifyReply,
+    requestedSessionId: string | undefined,
+    nextAction = "start-or-ensure-session",
+  ): FastifyReply {
+    return sendError(
+      reply,
+      404,
+      "SESSION_NOT_FOUND",
+      "Session was not found",
+      {
+        requestedSessionId: requestedSessionId ?? null,
+        ...this.activeSessionDetails(),
+      },
+      nextAction,
+    );
+  }
+
+  private validateSessionTargetOrReply(
+    reply: FastifyReply,
+    tabUrl: string,
+    debugPort: number,
+  ): { tabUrl: string; debugPort: number } | FastifyReply {
+    const hostname = parseHostname(tabUrl);
+    if (!hostname) {
+      return sendError(reply, 422, "VALIDATION_ERROR", "tabUrl must be a valid URL");
+    }
+
+    if (!isAllowedHostname(hostname, this.runtimeConfigState.getAllowedDomains())) {
+      return sendError(reply, 403, "DOMAIN_NOT_ALLOWED", "Domain is not allowlisted", {
+        hostname,
+        allowedDomains: this.runtimeConfigState.getAllowedDomains(),
+      });
+    }
+
+    return {
+      tabUrl,
+      debugPort,
+    };
+  }
+
+  private async stopActiveSessionIfAny(): Promise<void> {
+    const active = this.sessionManager.getActive();
+    if (!active) {
+      return;
+    }
+
+    try {
+      await this.cdpController.detach();
+    } catch {
+      // ignore detach failures during recovery
+    }
+
+    try {
+      this.sessionManager.stop(active.sessionId);
+    } catch {
+      // ignore stale session state during recovery
+    }
+  }
+
+  private async startFreshSession(tabUrl: string, debugPort: number): Promise<{
+    sessionId: string;
+    ingestToken: string;
+    state: string;
+    attachedTargetUrl: string;
+    reused: boolean;
+  }> {
+    this.sessionManager.startStarting(tabUrl, debugPort);
+
+    let attachedTargetUrl: string | null = null;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        attachedTargetUrl = await this.cdpController.attach({
+          tabUrlPattern: tabUrl,
+          debugPort,
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        await sleep(500);
+      }
+    }
+
+    if (!attachedTargetUrl) {
+      this.sessionManager.markError();
+      if (lastError instanceof TargetNotFoundError) {
+        throw lastError;
+      }
+      throw new CdpUnavailableError(String(lastError));
+    }
+
+    const running = this.sessionManager.markRunning(attachedTargetUrl);
+    return {
+      sessionId: running.sessionId,
+      ingestToken: running.ingestToken,
+      state: running.state,
+      attachedTargetUrl,
+      reused: false,
+    };
+  }
+
+  private async ensureSession(tabUrl: string, debugPort: number, reuseActive: boolean): Promise<{
+    sessionId: string;
+    ingestToken: string;
+    state: string;
+    attachedTargetUrl: string;
+    reused: boolean;
+  }> {
+    const active = this.sessionManager.getActive();
+    if (active && active.state === "running" && this.cdpController.hasConnection()) {
+      const activeTarget = active.attachedTargetUrl ?? active.tabUrl;
+      const sameTarget = activeTarget === tabUrl || active.tabUrl === tabUrl;
+      if (reuseActive && sameTarget) {
+        return {
+          sessionId: active.sessionId,
+          ingestToken: active.ingestToken,
+          state: active.state,
+          attachedTargetUrl: activeTarget,
+          reused: true,
+        };
+      }
+      if (!reuseActive) {
+        throw new Error("SESSION_ALREADY_RUNNING");
+      }
+      await this.stopActiveSessionIfAny();
+    } else if (active) {
+      await this.stopActiveSessionIfAny();
+    }
+
+    return this.startFreshSession(tabUrl, debugPort);
   }
 
   private registerCoreRoutes(): void {
@@ -257,60 +444,80 @@ export class AgentRuntime {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid /session/start payload", parsed.error.flatten());
       }
 
-      const hostname = parseHostname(parsed.data.tabUrl);
-      if (!hostname) {
-        return sendError(reply, 422, "VALIDATION_ERROR", "tabUrl must be a valid URL");
-      }
-
-      if (!isAllowedHostname(hostname, this.runtimeConfigState.getAllowedDomains())) {
-        return sendError(reply, 403, "DOMAIN_NOT_ALLOWED", "Domain is not allowlisted", {
-          hostname,
-          allowedDomains: this.runtimeConfigState.getAllowedDomains(),
-        });
+      const target = this.validateSessionTargetOrReply(reply, parsed.data.tabUrl, parsed.data.debugPort);
+      if (!("tabUrl" in target)) {
+        return target;
       }
 
       try {
-        this.sessionManager.startStarting(parsed.data.tabUrl, parsed.data.debugPort);
-      } catch {
-        return sendError(reply, 409, "SESSION_ALREADY_RUNNING", "A session is already running");
-      }
-
-      let attachedTargetUrl: string | null = null;
-      let lastError: unknown;
-
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        try {
-          attachedTargetUrl = await this.cdpController.attach({
-            tabUrlPattern: parsed.data.tabUrl,
-            debugPort: parsed.data.debugPort,
-          });
-          break;
-        } catch (error) {
-          lastError = error;
-          await sleep(500);
+        const session = await this.ensureSession(target.tabUrl, target.debugPort, false);
+        return reply.code(200).send({
+          sessionId: session.sessionId,
+          ingestToken: session.ingestToken,
+          state: session.state,
+          attachedTargetUrl: session.attachedTargetUrl,
+          reused: false,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === "SESSION_ALREADY_RUNNING") {
+          return sendError(
+            reply,
+            409,
+            "SESSION_ALREADY_RUNNING",
+            "A session is already running",
+            this.activeSessionDetails(),
+            "use-session-ensure-or-stop",
+          );
         }
-      }
-
-      if (!attachedTargetUrl) {
-        this.sessionManager.markError();
-
-        if (lastError instanceof TargetNotFoundError) {
+        if (error instanceof TargetNotFoundError) {
           return sendError(reply, 404, "TARGET_NOT_FOUND", "No matching tab found for tabUrl");
         }
+        if (error instanceof CdpUnavailableError) {
+          return sendError(reply, 503, "CDP_UNAVAILABLE", "Unable to connect to CDP", { reason: error.message });
+        }
+        return sendError(reply, 422, "VALIDATION_ERROR", "Session start failed", { reason: String(error) });
+      }
+    });
 
-        return sendError(reply, 503, "CDP_UNAVAILABLE", "Unable to connect to CDP", {
-          reason: String(lastError),
-        });
+    this.coreServer.post("/session/ensure", async (request, reply) => {
+      const parsed = SessionEnsureRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "Invalid /session/ensure payload", parsed.error.flatten());
       }
 
-      const running = this.sessionManager.markRunning(attachedTargetUrl);
+      const target = this.validateSessionTargetOrReply(reply, parsed.data.tabUrl, parsed.data.debugPort);
+      if (!("tabUrl" in target)) {
+        return target;
+      }
 
-      return reply.code(200).send({
-        sessionId: running.sessionId,
-        ingestToken: running.ingestToken,
-        state: running.state,
-        attachedTargetUrl,
-      });
+      try {
+        const session = await this.ensureSession(target.tabUrl, target.debugPort, parsed.data.reuseActive);
+        return reply.code(200).send({
+          sessionId: session.sessionId,
+          ingestToken: session.ingestToken,
+          state: session.state,
+          attachedTargetUrl: session.attachedTargetUrl,
+          reused: session.reused,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === "SESSION_ALREADY_RUNNING") {
+          return sendError(
+            reply,
+            409,
+            "SESSION_ALREADY_RUNNING",
+            "A session is already running",
+            this.activeSessionDetails(),
+            "set-reuseActive-true-or-stop-session",
+          );
+        }
+        if (error instanceof TargetNotFoundError) {
+          return sendError(reply, 404, "TARGET_NOT_FOUND", "No matching tab found for tabUrl");
+        }
+        if (error instanceof CdpUnavailableError) {
+          return sendError(reply, 503, "CDP_UNAVAILABLE", "Unable to connect to CDP", { reason: error.message });
+        }
+        return sendError(reply, 422, "VALIDATION_ERROR", "Session ensure failed", { reason: String(error) });
+      }
     });
 
     this.coreServer.post("/session/stop", async (request, reply) => {
@@ -327,7 +534,7 @@ export class AgentRuntime {
           state: stopped.state,
         });
       } catch {
-        return sendError(reply, 404, "SESSION_NOT_FOUND", "Session was not found");
+        return this.sendSessionNotFound(reply, parsed.data.sessionId, "ensure-session");
       }
     });
 
@@ -375,22 +582,25 @@ export class AgentRuntime {
 
       const command = parsed.data.command;
       const isCompareReference = command === "compare-reference";
-      const isWebglDiagnostics = command === "webgl-diagnostics";
       const active = this.sessionManager.getActive();
+      const requestedSessionId = parsed.data.sessionId;
+      const activeSessionId = active?.sessionId;
 
-      if (isWebglDiagnostics && !this.cdpController.hasConnection()) {
-        return sendError(reply, 503, "CDP_UNAVAILABLE", "No attached CDP target");
+      let eventSessionId = requestedSessionId ?? this.sessionManager.resolveSessionId();
+
+      if (!isCompareReference) {
+        const commandSessionId = requestedSessionId ?? activeSessionId;
+        if (!commandSessionId) {
+          return this.sendSessionNotFound(reply, requestedSessionId, "ensure-session");
+        }
+        if (!active || active.sessionId !== commandSessionId) {
+          return this.sendSessionNotFound(reply, commandSessionId, "ensure-session");
+        }
+        if (!this.cdpController.hasConnection()) {
+          return sendError(reply, 503, "CDP_UNAVAILABLE", "No attached CDP target", this.activeSessionDetails(), "ensure-session");
+        }
+        eventSessionId = commandSessionId;
       }
-
-      if (!isCompareReference && (!active || active.sessionId !== parsed.data.sessionId)) {
-        return sendError(reply, 404, "SESSION_NOT_FOUND", "Session was not found");
-      }
-
-      if (!isCompareReference && !this.cdpController.hasConnection()) {
-        return sendError(reply, 503, "CDP_UNAVAILABLE", "No attached CDP target");
-      }
-
-      const eventSessionId = isCompareReference ? parsed.data.sessionId : (active?.sessionId ?? parsed.data.sessionId);
 
       try {
         let result: Record<string, unknown> = { ok: true };
@@ -398,6 +608,20 @@ export class AgentRuntime {
         if (command === "reload") {
           const payload = ReloadPayloadSchema.parse(parsed.data.payload);
           result = await this.cdpController.reload(payload.timeoutMs);
+        } else if (command === "wait") {
+          const payload = WaitPayloadSchema.parse(parsed.data.payload);
+          result = await this.cdpController.wait(payload.ms);
+        } else if (command === "navigate") {
+          const payload = NavigatePayloadSchema.parse(parsed.data.payload);
+          result = await this.cdpController.navigate(payload.url, payload.timeoutMs);
+        } else if (command === "evaluate") {
+          const payload = EvaluatePayloadSchema.parse(parsed.data.payload);
+          result = await this.cdpController.evaluate(
+            payload.expression,
+            payload.returnByValue,
+            payload.awaitPromise,
+            payload.timeoutMs,
+          );
         } else if (command === "click") {
           const payload = ClickPayloadSchema.parse(parsed.data.payload);
           result = await this.cdpController.click(payload.selector, payload.timeoutMs);
@@ -411,7 +635,7 @@ export class AgentRuntime {
           result = { path: screenshotPath };
         } else if (command === "compare-reference") {
           const payload = CompareReferencePayloadSchema.parse(parsed.data.payload);
-          result = this.runCompareReference(parsed.data.sessionId, payload);
+          result = this.runCompareReference(eventSessionId, payload);
         } else if (command === "webgl-diagnostics") {
           const payload = WebglDiagnosticsPayloadSchema.parse(parsed.data.payload);
           const diagnostics = await this.cdpController.webglDiagnostics(payload.timeoutMs);
@@ -445,7 +669,7 @@ export class AgentRuntime {
         }
 
         if (error instanceof CdpUnavailableError) {
-          return sendError(reply, 503, "CDP_UNAVAILABLE", "CDP command failed", { reason: error.message });
+          return sendError(reply, 503, "CDP_UNAVAILABLE", "CDP command failed", { reason: error.message }, "ensure-session");
         }
 
         return sendError(reply, 422, "VALIDATION_ERROR", "Command failed", { reason: String(error) });

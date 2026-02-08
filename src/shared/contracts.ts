@@ -92,12 +92,21 @@ export const SessionStartRequestSchema = z.object({
   debugPort: z.number().int().positive().default(9222),
 });
 
+export const SessionEnsureRequestSchema = z.object({
+  tabUrl: z.string().min(1),
+  debugPort: z.number().int().positive().default(9222),
+  reuseActive: z.boolean().default(true),
+});
+
 export const SessionStopRequestSchema = z.object({
   sessionId: z.string().min(1),
 });
 
 export const CommandSchema = z.enum([
   "reload",
+  "wait",
+  "navigate",
+  "evaluate",
   "click",
   "type",
   "snapshot",
@@ -108,6 +117,23 @@ export const CommandSchema = z.enum([
 export const ReloadPayloadSchema = z.object({
   waitUntil: z.enum(["load"]).default("load"),
   timeoutMs: z.number().int().positive().default(15000),
+});
+
+export const WaitPayloadSchema = z.object({
+  ms: z.number().int().positive(),
+});
+
+export const NavigatePayloadSchema = z.object({
+  url: z.string().url(),
+  waitUntil: z.enum(["load"]).default("load"),
+  timeoutMs: z.number().int().positive().default(20000),
+});
+
+export const EvaluatePayloadSchema = z.object({
+  expression: z.string().min(1),
+  returnByValue: z.boolean().default(true),
+  awaitPromise: z.boolean().default(true),
+  timeoutMs: z.number().int().positive().default(10000),
 });
 
 export const ClickPayloadSchema = z.object({
@@ -139,7 +165,7 @@ export const WebglDiagnosticsPayloadSchema = z.object({
 });
 
 export const CommandRequestSchema = z.object({
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).optional(),
   command: CommandSchema,
   payload: z.unknown().default({}),
 });
@@ -199,3 +225,7 @@ export type ProjectRuntimeConfig = z.infer<typeof ProjectRuntimeConfigSchema>;
 export type NetworkAllowlistRule = z.infer<typeof NetworkAllowlistRuleSchema>;
 export type CompareReferencePayload = z.infer<typeof CompareReferencePayloadSchema>;
 export type WebglDiagnosticsPayload = z.infer<typeof WebglDiagnosticsPayloadSchema>;
+export type SessionEnsureRequest = z.infer<typeof SessionEnsureRequestSchema>;
+export type WaitPayload = z.infer<typeof WaitPayloadSchema>;
+export type NavigatePayload = z.infer<typeof NavigatePayloadSchema>;
+export type EvaluatePayload = z.infer<typeof EvaluatePayloadSchema>;

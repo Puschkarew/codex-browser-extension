@@ -61,10 +61,11 @@ npm run agent:start
 2. `GET http://127.0.0.1:4678/runtime/config`
 3. `POST http://127.0.0.1:4678/runtime/config`
 4. `POST http://127.0.0.1:4678/session/start`
-5. `POST http://127.0.0.1:4678/session/stop`
-6. `POST http://127.0.0.1:4678/events` (requires `X-Ingest-Token`)
-7. `POST http://127.0.0.1:4678/command`
-8. `GET http://127.0.0.1:4678/events/query`
+5. `POST http://127.0.0.1:4678/session/ensure` (start or reuse active session)
+6. `POST http://127.0.0.1:4678/session/stop`
+7. `POST http://127.0.0.1:4678/events` (requires `X-Ingest-Token`)
+8. `POST http://127.0.0.1:4678/command`
+9. `GET http://127.0.0.1:4678/events/query`
 
 `/health` includes readiness fields:
 1. `readiness.debug`: debug API registered.
@@ -193,36 +194,57 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project
 
 When running terminal-probe scenario capture/metrics:
 ```bash
-python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id auto --tab-url <url> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
 Customize the scenario file with real ON/OFF/paused selectors for your app.
+
+Or resolve/reuse session directly from CLI:
+```bash
+npm run agent:session -- --tab-url <url>
+```
 
 ## Commands
 
 1. Reload:
 ```bash
-npm run agent:cmd -- --session <id> --do reload
+npm run agent:cmd -- --do reload
 ```
-2. Click:
+2. Wait:
+```bash
+npm run agent:cmd -- --do wait --ms 1200
+```
+3. Navigate:
+```bash
+npm run agent:cmd -- --do navigate --url "http://127.0.0.1:5173/"
+```
+4. Evaluate JS on page:
+```bash
+npm run agent:cmd -- --do evaluate --expr "window.location.href"
+```
+5. Click:
 ```bash
 npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
 ```
-3. Type:
+6. Type:
 ```bash
 npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
 ```
-4. Snapshot:
+7. Snapshot:
 ```bash
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
 ```
-5. Compare reference images:
+8. Compare reference images:
 ```bash
 npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
 ```
-6. WebGL diagnostics:
+9. WebGL diagnostics:
 ```bash
 npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
+
+Notes:
+1. `--session <id>` is optional for `/command`; when omitted, runtime uses active session if available.
+2. For `compare-reference`, command can run without active CDP session and without explicit `sessionId`.
 
 ## Retention
 

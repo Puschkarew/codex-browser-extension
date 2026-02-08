@@ -9,6 +9,7 @@
   "scripts": {
     "agent:start": "tsx src/agent/index.ts",
     "agent:stop": "tsx src/cli/stop.ts",
+    "agent:session": "tsx src/cli/session.ts",
     "agent:cmd": "tsx src/cli/cmd.ts",
     "agent:query": "tsx src/cli/query.ts",
     "skill:sync:from-local": "bash scripts/sync-fix-app-bugs-skill.sh --from-local",

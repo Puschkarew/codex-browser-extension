@@ -8,6 +8,7 @@ type AttachOptions = {
 type CdpClient = {
   Page: {
     enable(): Promise<void>;
+    navigate(params: { url: string }): Promise<void>;
     reload(params: { ignoreCache?: boolean }): Promise<void>;
     once(eventName: string, handler: () => void): void;
     captureScreenshot(params: { format: "png"; fromSurface?: boolean }): Promise<{ data: string }>;
@@ -103,6 +104,45 @@ export class CdpController {
     return { ok: true };
   }
 
+  async navigate(url: string, timeoutMs: number): Promise<{ ok: true; url: string }> {
+    const client = this.requireClient();
+    const done = new Promise<void>((resolve) => {
+      client.Page.once("loadEventFired", () => resolve());
+    });
+
+    await client.Page.navigate({ url });
+    await this.withTimeout(done, timeoutMs);
+    return { ok: true, url };
+  }
+
+  async wait(ms: number): Promise<{ ok: true; waitedMs: number }> {
+    const waitedMs = Math.max(1, Math.floor(ms));
+    await new Promise((resolve) => setTimeout(resolve, waitedMs));
+    return { ok: true, waitedMs };
+  }
+
+  async evaluate(
+    expression: string,
+    returnByValue: boolean,
+    awaitPromise: boolean,
+    timeoutMs: number,
+  ): Promise<{ ok: true; value: unknown }> {
+    const client = this.requireClient();
+    const evaluated = (await this.withTimeout(
+      client.Runtime.evaluate({
+        expression,
+        returnByValue,
+        awaitPromise,
+      }),
+      timeoutMs,
+    )) as { result: { value?: unknown } };
+
+    return {
+      ok: true,
+      value: evaluated.result.value,
+    };
+  }
+
   async click(selector: string, timeoutMs: number): Promise<{ ok: true }> {
     const client = this.requireClient();
     const escaped = JSON.stringify(selector);
@@ -173,6 +213,66 @@ export class CdpController {
   async webglDiagnostics(timeoutMs: number): Promise<Record<string, unknown>> {
     const client = this.requireClient();
     const expression = `(() => {
+      function inspectSceneCanvas() {
+        const sceneCanvas = document.querySelector("canvas");
+        if (!sceneCanvas) {
+          return {
+            hasCanvas: false,
+            hasWebglContext: false,
+            cssWidth: 0,
+            cssHeight: 0,
+            drawingBufferWidth: 0,
+            drawingBufferHeight: 0,
+            meanLuminance: null,
+            nonBlackRatio: null
+          };
+        }
+
+        const gl = sceneCanvas.getContext("webgl2") || sceneCanvas.getContext("webgl") || sceneCanvas.getContext("experimental-webgl");
+        const rect = sceneCanvas.getBoundingClientRect();
+        if (!gl) {
+          return {
+            hasCanvas: true,
+            hasWebglContext: false,
+            cssWidth: rect.width,
+            cssHeight: rect.height,
+            drawingBufferWidth: sceneCanvas.width || 0,
+            drawingBufferHeight: sceneCanvas.height || 0,
+            meanLuminance: null,
+            nonBlackRatio: null
+          };
+        }
+
+        const width = Math.max(1, gl.drawingBufferWidth);
+        const height = Math.max(1, gl.drawingBufferHeight);
+        const pixels = new Uint8Array(width * height * 4);
+        gl.finish();
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        let luminanceSum = 0;
+        let nonBlackPixels = 0;
+        const totalPixels = width * height;
+        for (let i = 0; i < pixels.length; i += 4) {
+          const r = pixels[i];
+          const g = pixels[i + 1];
+          const b = pixels[i + 2];
+          luminanceSum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          if (r > 3 || g > 3 || b > 3) {
+            nonBlackPixels += 1;
+          }
+        }
+
+        return {
+          hasCanvas: true,
+          hasWebglContext: true,
+          cssWidth: rect.width,
+          cssHeight: rect.height,
+          drawingBufferWidth: width,
+          drawingBufferHeight: height,
+          meanLuminance: totalPixels > 0 ? luminanceSum / totalPixels : null,
+          nonBlackRatio: totalPixels > 0 ? nonBlackPixels / totalPixels : null
+        };
+      }
+
       const canvas = document.createElement("canvas");
       const webgl2 = canvas.getContext("webgl2");
       const webgl = webgl2 || canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
@@ -214,6 +314,7 @@ export class CdpController {
           webgl: hasWebgl,
           webgl2: hasWebgl2
         },
+        scene: inspectSceneCanvas(),
         extensions,
         renderer: {
           vendor,
