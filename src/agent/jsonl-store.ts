@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import { QueryRequest, RuntimeEvent } from "../shared/contracts.js";
 
@@ -6,6 +7,14 @@ export type QueryResult = {
   count: number;
   truncated: boolean;
   events: RuntimeEvent[];
+};
+
+export type ArtifactRun = {
+  runId: string;
+  sessionId: string;
+  label: string;
+  createdAt: string;
+  dir: string;
 };
 
 export class JsonlStore {
@@ -38,6 +47,39 @@ export class JsonlStore {
     const fileName = `${Date.now()}.png`;
     const filePath = path.join(dir, fileName);
     fs.writeFileSync(filePath, Buffer.from(screenshotBase64, "base64"));
+    return filePath;
+  }
+
+  createArtifactRun(sessionId: string, label = "compare-reference"): ArtifactRun {
+    const safeSessionId = this.sanitizePathSegment(sessionId, "manual");
+    const safeLabel = this.sanitizePathSegment(label, "artifact");
+    const createdAt = new Date().toISOString();
+    const tsPart = createdAt.replace(/[:.]/g, "-");
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const runId = `${tsPart}-${safeLabel}-${suffix}`;
+    const dir = path.join(this.rootDir, safeSessionId, "artifacts", runId);
+    fs.mkdirSync(dir, { recursive: true });
+
+    return {
+      runId,
+      sessionId: safeSessionId,
+      label: safeLabel,
+      createdAt,
+      dir,
+    };
+  }
+
+  writeArtifactJson(run: ArtifactRun, fileName: string, payload: unknown): string {
+    const safeFileName = this.sanitizeFileName(fileName);
+    const filePath = path.join(run.dir, safeFileName);
+    fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    return filePath;
+  }
+
+  writeArtifactBinary(run: ArtifactRun, fileName: string, data: Buffer): string {
+    const safeFileName = this.sanitizeFileName(fileName);
+    const filePath = path.join(run.dir, safeFileName);
+    fs.writeFileSync(filePath, data);
     return filePath;
   }
 
@@ -120,5 +162,16 @@ export class JsonlStore {
     }
 
     return deleted;
+  }
+
+  private sanitizePathSegment(value: string, fallback: string): string {
+    const trimmed = value.trim();
+    const normalized = trimmed.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+    return normalized || fallback;
+  }
+
+  private sanitizeFileName(value: string): string {
+    const base = path.basename(value);
+    return this.sanitizePathSegment(base, "artifact");
   }
 }

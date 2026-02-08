@@ -1,0 +1,42 @@
+[
+  {
+    "name": "scene-off",
+    "commands": [
+      {
+        "do": "reload",
+        "timeoutMs": 20000
+      },
+      {
+        "do": "click",
+        "selector": "button[data-test='effect-off']"
+      }
+    ],
+    "referenceImagePath": "/absolute/path/reference-off.png",
+    "fullPage": true
+  },
+  {
+    "name": "scene-on",
+    "commands": [
+      {
+        "do": "click",
+        "selector": "button[data-test='effect-on']"
+      }
+    ],
+    "referenceImagePath": "/absolute/path/reference-on.png",
+    "fullPage": true
+  },
+  {
+    "name": "scene-paused",
+    "commands": [
+      {
+        "do": "click",
+        "selector": "button[data-test='pause']"
+      },
+      {
+        "do": "webgl-diagnostics"
+      }
+    ],
+    "referenceImagePath": "/absolute/path/reference-paused.png",
+    "fullPage": true
+  }
+]

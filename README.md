@@ -66,10 +66,15 @@ export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
 ```
-4. If the real app URL is known:
+4. Re-run with the real app URL (required for browser-fetch mode):
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
 ```
+
+Bootstrap notes:
+- Loopback origins `localhost` and `127.0.0.1` are treated as equivalent for capability checks.
+- `checks.appUrl.recommendedCommands` now prioritizes `--apply-recommended` on mismatch to avoid rerun loops.
+- Inspect `browserInstrumentation.failureCategory` to distinguish `network-mismatch-only` vs `endpoint-unavailable`.
 
 If guarded bootstrap falls back or Enhanced prerequisites are unavailable, continue in Core mode.
 
@@ -107,7 +112,7 @@ Each target project can provide `.codex/browser-debug.json`:
 These commands are valid in both modes:
 - Start agent: `npm run agent:start`
 - Stop active session: `npm run agent:stop`
-- Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot>`
+- Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot|compare-reference|webgl-diagnostics>`
 - Query logs: `npm run agent:query -- --from <ISO> --to <ISO> [--tag <tag>]`
 - Run tests: `npm test`
 
@@ -117,7 +122,15 @@ npm run agent:cmd -- --session <id> --do reload
 npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
 npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
+npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
+
+Enhanced fallback helper (terminal-probe scenario pipeline):
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
+```
+This helper captures scenario snapshots, computes metrics (`mean`, `stddev`, `nonBlackRatio`, `MAE`), and writes `runtime.json`, `metrics.json`, `summary.json`.
 
 ## HTTP APIs
 Default base URLs:
@@ -132,7 +145,7 @@ Default base URLs:
 | `/session/stop` | `POST` | Stop current session and detach CDP. |
 | `/events` | `POST` | Ingest extension runtime events (requires `X-Ingest-Token`). |
 | `/events/query` | `GET` | Query JSONL events by time window and filters. |
-| `/command` | `POST` | Execute CDP command (`reload`, `click`, `type`, `snapshot`). |
+| `/command` | `POST` | Execute command (`reload`, `click`, `type`, `snapshot`, `compare-reference`, `webgl-diagnostics`). |
 | `/debug` | `OPTIONS`, `POST` | Preflight + `BUGFIX_TRACE` ingestion with origin allowlist checks. |
 
 Mode note: API surface stays the same in both modes; Enhanced mode imposes stricter workflow rules around when and how instrumentation is used.
@@ -148,7 +161,28 @@ Mode note: API surface stays the same in both modes; Enhanced mode imposes stric
 - `TARGET_NOT_FOUND`: ensure the active tab URL matches the requested `tabUrl` pattern.
 - `DOMAIN_NOT_ALLOWED` / `ORIGIN_NOT_ALLOWED` / `CORS_POLICY_BLOCKED_PATH`: update `capture.allowedDomains` and refresh runtime config.
 - `SESSION_ALREADY_RUNNING`: stop the active session first (`npm run agent:stop` or `/session/stop`).
+- `browserInstrumentation.failureCategory = network-mismatch-only`: apply first `checks.appUrl.recommendedCommands` entry with `--apply-recommended`.
+- `browserInstrumentation.failureCategory = endpoint-unavailable`: verify agent health and endpoint reachability before retrying browser-fetch.
 - Missing `fix-app-bugs` tooling is not a blocker for Core mode; run Core workflow directly.
+
+## Skill Sync Workflow
+
+Local skill is the source of truth:
+`$CODEX_HOME/skills/fix-app-bugs` (fallback: `$HOME/.codex/skills/fix-app-bugs`).
+
+Keep repository mirror in sync:
+1. Sync local -> repo mirror:
+```bash
+npm run skill:sync:from-local
+```
+2. Verify sync before commit/push:
+```bash
+npm run skill:sync:check
+```
+3. Optional repo -> local sync:
+```bash
+npm run skill:sync:to-local
+```
 
 Quick check:
 ```bash

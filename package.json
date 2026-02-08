@@ -11,6 +11,9 @@
     "agent:stop": "tsx src/cli/stop.ts",
     "agent:cmd": "tsx src/cli/cmd.ts",
     "agent:query": "tsx src/cli/query.ts",
+    "skill:sync:from-local": "bash scripts/sync-fix-app-bugs-skill.sh --from-local",
+    "skill:sync:to-local": "bash scripts/sync-fix-app-bugs-skill.sh --to-local",
+    "skill:sync:check": "bash scripts/check-fix-app-bugs-sync.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -19,6 +22,8 @@
     "@fastify/rate-limit": "^8.1.1",
     "chrome-remote-interface": "^0.33.3",
     "fastify": "^4.28.1",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

@@ -170,6 +170,81 @@ export class CdpController {
     return screenshot.data;
   }
 
+  async webglDiagnostics(timeoutMs: number): Promise<Record<string, unknown>> {
+    const client = this.requireClient();
+    const expression = `(() => {
+      const canvas = document.createElement("canvas");
+      const webgl2 = canvas.getContext("webgl2");
+      const webgl = webgl2 || canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      const hasWebgl2 = Boolean(webgl2);
+      const hasWebgl = Boolean(webgl);
+
+      let extensions = [];
+      let vendor = null;
+      let renderer = null;
+      let version = null;
+      let shadingLanguageVersion = null;
+      let unmaskedVendor = null;
+      let unmaskedRenderer = null;
+
+      if (webgl) {
+        try {
+          extensions = webgl.getSupportedExtensions() || [];
+          vendor = webgl.getParameter(webgl.VENDOR);
+          renderer = webgl.getParameter(webgl.RENDERER);
+          version = webgl.getParameter(webgl.VERSION);
+          shadingLanguageVersion = webgl.getParameter(webgl.SHADING_LANGUAGE_VERSION);
+          const rendererInfo = webgl.getExtension("WEBGL_debug_renderer_info");
+          if (rendererInfo) {
+            unmaskedVendor = webgl.getParameter(rendererInfo.UNMASKED_VENDOR_WEBGL);
+            unmaskedRenderer = webgl.getParameter(rendererInfo.UNMASKED_RENDERER_WEBGL);
+          }
+        } catch {
+          // Continue returning partial diagnostics.
+        }
+      }
+
+      const userAgent = navigator.userAgent || "";
+      const uaLower = userAgent.toLowerCase();
+      const hasHeadlessUaHint = uaLower.includes("headless");
+      const hasWebdriver = Boolean(navigator.webdriver);
+
+      return {
+        contexts: {
+          webgl: hasWebgl,
+          webgl2: hasWebgl2
+        },
+        extensions,
+        renderer: {
+          vendor,
+          renderer,
+          version,
+          shadingLanguageVersion,
+          unmaskedVendor,
+          unmaskedRenderer
+        },
+        environment: {
+          userAgent,
+          webdriver: hasWebdriver,
+          hasHeadlessUaHint,
+          headlessLikely: hasHeadlessUaHint || hasWebdriver
+        }
+      };
+    })()`;
+
+    const evaluated = (await this.withTimeout(
+      client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true }),
+      timeoutMs,
+    )) as { result: { value?: unknown } };
+
+    const diagnostics = evaluated.result.value;
+    if (!diagnostics || typeof diagnostics !== "object") {
+      throw new Error("WEBGL_DIAGNOSTICS_EMPTY");
+    }
+
+    return diagnostics as Record<string, unknown>;
+  }
+
   private async findTarget(
     tabUrlPattern: string,
     debugPort: number,

@@ -3,6 +3,7 @@ import Fastify, { FastifyInstance, FastifyReply } from "fastify";
 import path from "node:path";
 import {
   ClickPayloadSchema,
+  CompareReferencePayloadSchema,
   CommandRequestSchema,
   CoreEventsRequestSchema,
   DebugTraceBatchSchema,
@@ -15,9 +16,11 @@ import {
   SessionStopRequestSchema,
   SnapshotPayloadSchema,
   TypePayloadSchema,
+  WebglDiagnosticsPayloadSchema,
 } from "../shared/contracts.js";
 import { CdpController, CdpUnavailableError, CommandTimeoutError, TargetNotFoundError } from "./cdp-controller.js";
 import { isAllowedHostname, isAllowedOrigin } from "./domain-match.js";
+import { compareImages, ImageCompareError } from "./image-compare.js";
 import { JsonlStore } from "./jsonl-store.js";
 import { normalizeDebugTraceEvent, normalizeRuntimeEvent } from "./normalize.js";
 import { RuntimeConfigState } from "./runtime-config.js";
@@ -370,32 +373,49 @@ export class AgentRuntime {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid /command payload", parsed.error.flatten());
       }
 
+      const command = parsed.data.command;
+      const isCompareReference = command === "compare-reference";
+      const isWebglDiagnostics = command === "webgl-diagnostics";
       const active = this.sessionManager.getActive();
-      if (!active || active.sessionId !== parsed.data.sessionId) {
+
+      if (isWebglDiagnostics && !this.cdpController.hasConnection()) {
+        return sendError(reply, 503, "CDP_UNAVAILABLE", "No attached CDP target");
+      }
+
+      if (!isCompareReference && (!active || active.sessionId !== parsed.data.sessionId)) {
         return sendError(reply, 404, "SESSION_NOT_FOUND", "Session was not found");
       }
 
-      if (!this.cdpController.hasConnection()) {
+      if (!isCompareReference && !this.cdpController.hasConnection()) {
         return sendError(reply, 503, "CDP_UNAVAILABLE", "No attached CDP target");
       }
+
+      const eventSessionId = isCompareReference ? parsed.data.sessionId : (active?.sessionId ?? parsed.data.sessionId);
 
       try {
         let result: Record<string, unknown> = { ok: true };
 
-        if (parsed.data.command === "reload") {
+        if (command === "reload") {
           const payload = ReloadPayloadSchema.parse(parsed.data.payload);
           result = await this.cdpController.reload(payload.timeoutMs);
-        } else if (parsed.data.command === "click") {
+        } else if (command === "click") {
           const payload = ClickPayloadSchema.parse(parsed.data.payload);
           result = await this.cdpController.click(payload.selector, payload.timeoutMs);
-        } else if (parsed.data.command === "type") {
+        } else if (command === "type") {
           const payload = TypePayloadSchema.parse(parsed.data.payload);
           result = await this.cdpController.type(payload.selector, payload.text, payload.clear, payload.timeoutMs);
-        } else if (parsed.data.command === "snapshot") {
+        } else if (command === "snapshot") {
           const payload = SnapshotPayloadSchema.parse(parsed.data.payload);
           const screenshotData = await this.cdpController.snapshot(payload.timeoutMs);
-          const screenshotPath = this.store.saveScreenshot(active.sessionId, screenshotData);
+          const screenshotPath = this.store.saveScreenshot(eventSessionId, screenshotData);
           result = { path: screenshotPath };
+        } else if (command === "compare-reference") {
+          const payload = CompareReferencePayloadSchema.parse(parsed.data.payload);
+          result = this.runCompareReference(parsed.data.sessionId, payload);
+        } else if (command === "webgl-diagnostics") {
+          const payload = WebglDiagnosticsPayloadSchema.parse(parsed.data.payload);
+          const diagnostics = await this.cdpController.webglDiagnostics(payload.timeoutMs);
+          result = diagnostics;
         }
 
         this.store.appendEvent(
@@ -403,19 +423,23 @@ export class AgentRuntime {
             {
               eventType: "command",
               level: "info",
-              message: `command:${parsed.data.command}`,
+              message: `command:${command}`,
               data: {
-                command: parsed.data.command,
+                command,
                 payload: parsed.data.payload,
                 result,
               },
             },
-            active.sessionId,
+            eventSessionId,
           ),
         );
 
         return reply.code(200).send({ ok: true, result });
       } catch (error) {
+        if (error instanceof ImageCompareError) {
+          return sendError(reply, error.statusCode, error.code, error.message, error.details);
+        }
+
         if (error instanceof CommandTimeoutError) {
           return sendError(reply, 504, "COMMAND_TIMEOUT", "Command timed out");
         }
@@ -427,6 +451,79 @@ export class AgentRuntime {
         return sendError(reply, 422, "VALIDATION_ERROR", "Command failed", { reason: String(error) });
       }
     });
+  }
+
+  private runCompareReference(
+    sessionId: string,
+    payload: {
+      actualImagePath: string;
+      referenceImagePath: string;
+      label?: string;
+      writeDiff: boolean;
+    },
+  ): Record<string, unknown> {
+    const compared = compareImages({
+      actualImagePath: payload.actualImagePath,
+      referenceImagePath: payload.referenceImagePath,
+      writeDiff: payload.writeDiff,
+    });
+
+    const run = this.store.createArtifactRun(sessionId, payload.label ?? "compare-reference");
+
+    const actualImagePath = this.store.writeArtifactBinary(run, "actual.png", compared.actualPng);
+    const referenceImagePath = this.store.writeArtifactBinary(run, "reference.png", compared.referencePng);
+    const diffImagePath = compared.diffPng ? this.store.writeArtifactBinary(run, "diff.png", compared.diffPng) : null;
+
+    const runtimeJsonPath = this.store.writeArtifactJson(run, "runtime.json", {
+      command: "compare-reference",
+      sessionId,
+      runId: run.runId,
+      createdAt: run.createdAt,
+      label: run.label,
+      input: {
+        actualImagePath: compared.actualResolvedPath,
+        referenceImagePath: compared.referenceResolvedPath,
+        actualFormat: compared.actualFormat,
+        referenceFormat: compared.referenceFormat,
+        writeDiff: payload.writeDiff,
+      },
+      output: {
+        actualImagePath,
+        referenceImagePath,
+        diffImagePath,
+      },
+    });
+
+    const metricsJsonPath = this.store.writeArtifactJson(run, "metrics.json", compared.metrics);
+
+    const summaryJsonPath = this.store.writeArtifactJson(run, "summary.json", {
+      command: "compare-reference",
+      sessionId,
+      runId: run.runId,
+      artifactDir: run.dir,
+      metrics: compared.metrics,
+      artifacts: {
+        runtimeJsonPath,
+        metricsJsonPath,
+        actualImagePath,
+        referenceImagePath,
+        diffImagePath,
+      },
+    });
+
+    return {
+      runId: run.runId,
+      artifactDir: run.dir,
+      metrics: compared.metrics,
+      artifacts: {
+        runtimeJsonPath,
+        metricsJsonPath,
+        summaryJsonPath,
+        actualImagePath,
+        referenceImagePath,
+        diffImagePath,
+      },
+    };
   }
 
   private registerDebugRoutes(): void {

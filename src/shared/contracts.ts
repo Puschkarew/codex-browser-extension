@@ -96,7 +96,14 @@ export const SessionStopRequestSchema = z.object({
   sessionId: z.string().min(1),
 });
 
-export const CommandSchema = z.enum(["reload", "click", "type", "snapshot"]);
+export const CommandSchema = z.enum([
+  "reload",
+  "click",
+  "type",
+  "snapshot",
+  "compare-reference",
+  "webgl-diagnostics",
+]);
 
 export const ReloadPayloadSchema = z.object({
   waitUntil: z.enum(["load"]).default("load"),
@@ -120,17 +127,21 @@ export const SnapshotPayloadSchema = z.object({
   timeoutMs: z.number().int().positive().default(20000),
 });
 
-const CommandPayloadSchema = z.union([
-  ReloadPayloadSchema,
-  ClickPayloadSchema,
-  TypePayloadSchema,
-  SnapshotPayloadSchema,
-]);
+export const CompareReferencePayloadSchema = z.object({
+  actualImagePath: z.string().min(1),
+  referenceImagePath: z.string().min(1),
+  label: z.string().min(1).optional(),
+  writeDiff: z.boolean().default(true),
+});
+
+export const WebglDiagnosticsPayloadSchema = z.object({
+  timeoutMs: z.number().int().positive().default(10000),
+});
 
 export const CommandRequestSchema = z.object({
   sessionId: z.string().min(1),
   command: CommandSchema,
-  payload: CommandPayloadSchema.default({}),
+  payload: z.unknown().default({}),
 });
 
 export const QueryRequestSchema = z.object({
@@ -186,3 +197,5 @@ export type QueryResponse = z.infer<typeof QueryResponseSchema>;
 export type CommandRequest = z.infer<typeof CommandRequestSchema>;
 export type ProjectRuntimeConfig = z.infer<typeof ProjectRuntimeConfigSchema>;
 export type NetworkAllowlistRule = z.infer<typeof NetworkAllowlistRuleSchema>;
+export type CompareReferencePayload = z.infer<typeof CompareReferencePayloadSchema>;
+export type WebglDiagnosticsPayload = z.infer<typeof WebglDiagnosticsPayloadSchema>;

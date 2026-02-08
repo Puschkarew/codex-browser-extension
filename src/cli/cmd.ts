@@ -8,7 +8,7 @@ type CommandResponse = {
 
 function usage(): never {
   throw new Error(
-    "Usage: npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot> [--selector <css>] [--text <value>] [--clear] [--timeout <ms>] [--fullPage]",
+    "Usage: npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot|compare-reference|webgl-diagnostics> [--selector <css>] [--text <value>] [--clear] [--timeout <ms>] [--fullPage] [--actual <path>] [--reference <path>] [--label <name>] [--noDiff]",
   );
 }
 
@@ -47,6 +47,23 @@ async function main(): Promise<void> {
     };
   } else if (command === "snapshot") {
     payload = { fullPage: hasFlag("--fullPage"), ...(timeoutMs ? { timeoutMs } : {}) };
+  } else if (command === "compare-reference") {
+    const actualImagePath = getArg("--actual");
+    const referenceImagePath = getArg("--reference");
+    const label = getArg("--label");
+
+    if (!actualImagePath || !referenceImagePath) {
+      usage();
+    }
+
+    payload = {
+      actualImagePath,
+      referenceImagePath,
+      ...(label ? { label } : {}),
+      writeDiff: !hasFlag("--noDiff"),
+    };
+  } else if (command === "webgl-diagnostics") {
+    payload = { ...(timeoutMs ? { timeoutMs } : {}) };
   } else {
     usage();
   }

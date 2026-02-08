@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { PNG } from "pngjs";
 import { AgentRuntime } from "../src/agent/runtime.js";
 
 type RuntimeContext = {
@@ -47,6 +48,28 @@ async function optionsRequest(url: string, headers: Record<string, string> = {})
   const text = await response.text();
   const json = text ? JSON.parse(text) : {};
   return { response, json, text };
+}
+
+function writePng(
+  filePath: string,
+  width: number,
+  height: number,
+  fillPixel: (x: number, y: number) => [number, number, number, number],
+): void {
+  const png = new PNG({ width, height });
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const idx = (width * y + x) * 4;
+      const [r, g, b, a] = fillPixel(x, y);
+      png.data[idx] = r;
+      png.data[idx + 1] = g;
+      png.data[idx + 2] = b;
+      png.data[idx + 3] = a;
+    }
+  }
+
+  fs.writeFileSync(filePath, PNG.sync.write(png));
 }
 
 describe("AgentRuntime APIs", () => {
@@ -348,5 +371,114 @@ describe("AgentRuntime APIs", () => {
 
     expect(response.status).toBe(403);
     expect(json.error.code).toBe("DOMAIN_NOT_ALLOWED");
+  });
+
+  it("runs compare-reference command and writes standardized artifact bundle", async () => {
+    const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference");
+    fs.mkdirSync(fixturesDir, { recursive: true });
+
+    const actualPath = path.join(fixturesDir, "actual.png");
+    const referencePath = path.join(fixturesDir, "reference.png");
+    writePng(actualPath, 2, 2, (x, y) => (x === 0 && y === 0 ? [0, 0, 0, 255] : [255, 255, 255, 255]));
+    writePng(referencePath, 2, 2, () => [255, 255, 255, 255]);
+
+    const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+      sessionId: "compare-reference-session",
+      command: "compare-reference",
+      payload: {
+        actualImagePath: actualPath,
+        referenceImagePath: referencePath,
+        label: "parity-check",
+        writeDiff: true,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.result.runId).toBeTruthy();
+    expect(json.result.metrics.diffPixels).toBe(1);
+    expect(json.result.metrics.totalPixels).toBe(4);
+    expect(json.result.metrics.percentDiffPixels).toBe(25);
+
+    const runtimeJsonPath = String(json.result.artifacts.runtimeJsonPath);
+    const metricsJsonPath = String(json.result.artifacts.metricsJsonPath);
+    const summaryJsonPath = String(json.result.artifacts.summaryJsonPath);
+    const actualArtifactPath = String(json.result.artifacts.actualImagePath);
+    const referenceArtifactPath = String(json.result.artifacts.referenceImagePath);
+    const diffArtifactPath = String(json.result.artifacts.diffImagePath);
+
+    expect(fs.existsSync(runtimeJsonPath)).toBe(true);
+    expect(fs.existsSync(metricsJsonPath)).toBe(true);
+    expect(fs.existsSync(summaryJsonPath)).toBe(true);
+    expect(fs.existsSync(actualArtifactPath)).toBe(true);
+    expect(fs.existsSync(referenceArtifactPath)).toBe(true);
+    expect(fs.existsSync(diffArtifactPath)).toBe(true);
+
+    const metricsPayload = JSON.parse(fs.readFileSync(metricsJsonPath, "utf8")) as {
+      width: number;
+      height: number;
+      diffPixels: number;
+    };
+    expect(metricsPayload.width).toBe(2);
+    expect(metricsPayload.height).toBe(2);
+    expect(metricsPayload.diffPixels).toBe(1);
+  });
+
+  it("returns detailed compare-reference errors for missing file, invalid format, and dimension mismatch", async () => {
+    const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference-errors");
+    fs.mkdirSync(fixturesDir, { recursive: true });
+
+    const existingPngPath = path.join(fixturesDir, "existing.png");
+    writePng(existingPngPath, 2, 2, () => [255, 255, 255, 255]);
+
+    const { response: missingResponse, json: missingJson } = await postJson(`${ctx.coreUrl}/command`, {
+      sessionId: "compare-reference-session",
+      command: "compare-reference",
+      payload: {
+        actualImagePath: path.join(fixturesDir, "missing.png"),
+        referenceImagePath: existingPngPath,
+      },
+    });
+    expect(missingResponse.status).toBe(404);
+    expect(missingJson.error.code).toBe("FILE_NOT_FOUND");
+
+    const unsupportedPath = path.join(fixturesDir, "unsupported.txt");
+    fs.writeFileSync(unsupportedPath, "plain-text");
+    const { response: unsupportedResponse, json: unsupportedJson } = await postJson(`${ctx.coreUrl}/command`, {
+      sessionId: "compare-reference-session",
+      command: "compare-reference",
+      payload: {
+        actualImagePath: unsupportedPath,
+        referenceImagePath: existingPngPath,
+      },
+    });
+    expect(unsupportedResponse.status).toBe(422);
+    expect(unsupportedJson.error.code).toBe("UNSUPPORTED_IMAGE_FORMAT");
+
+    const smallPngPath = path.join(fixturesDir, "small.png");
+    writePng(smallPngPath, 1, 1, () => [255, 255, 255, 255]);
+    const { response: mismatchResponse, json: mismatchJson } = await postJson(`${ctx.coreUrl}/command`, {
+      sessionId: "compare-reference-session",
+      command: "compare-reference",
+      payload: {
+        actualImagePath: smallPngPath,
+        referenceImagePath: existingPngPath,
+      },
+    });
+    expect(mismatchResponse.status).toBe(422);
+    expect(mismatchJson.error.code).toBe("IMAGE_DIMENSION_MISMATCH");
+  });
+
+  it("returns CDP_UNAVAILABLE for webgl-diagnostics when no CDP target is attached", async () => {
+    const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+      sessionId: "webgl-diagnostics-session",
+      command: "webgl-diagnostics",
+      payload: {
+        timeoutMs: 5000,
+      },
+    });
+
+    expect(response.status).toBe(503);
+    expect(json.error.code).toBe("CDP_UNAVAILABLE");
   });
 });

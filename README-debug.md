@@ -118,7 +118,7 @@ Always run guarded bootstrap first:
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
 ```
 
-If actual app URL is known:
+Run again with actual app URL (required for browser-fetch mode):
 
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
@@ -135,6 +135,18 @@ Use `checks.appUrl` diagnostics as a mini-checklist:
 1. `checks.appUrl.checklist` for pass/fail steps.
 2. `checks.appUrl.recommendedCommands` for re-run and optional auto-fix commands.
 3. `checks.appUrl.canAutoFix` + `checks.appUrl.autoFixMode` to confirm that auto-fix is explicit-flag only.
+4. `checks.appUrl.matchType` (`exact` / `loopback-equivalent`) and `checks.appUrl.nextAction` for deterministic next step selection.
+5. Always print `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together in run status.
+6. If `checks.appUrl.status` is `not-provided` or `mismatch`, run the first recommended command before continuing.
+
+Fallback cause diagnostics are explicit:
+1. `browserInstrumentation.failureCategory`
+2. `browserInstrumentation.failedChecks`
+3. `browserInstrumentation.reason`
+
+Headless false-negative guard is explicit:
+1. `checks.headedEvidence`
+2. `checks.warnings`
 
 Playwright compatibility diagnostics are also machine-readable:
 1. `checks.tools.playwright.wrapperSmoke`
@@ -167,17 +179,23 @@ Correlation strategy:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
 ```
-4. If you know the real page URL:
+4. Re-run with the real page URL:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
 ```
-If `checks.appUrl.status = mismatch`, run:
+If `checks.appUrl.status = not-provided` or `checks.appUrl.status = mismatch`, run:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --apply-recommended --json
 ```
 5. If guarded bootstrap reports `bootstrap.status = ok`, runtime config is managed through the underlying bootstrap.
 6. If guarded bootstrap reports `bootstrap.status = fallback`, continue in terminal-probe mode.
 7. Extension auto-discovers core port (`4678..4698`), fetches runtime config, and hot-updates capture rules when core API is reachable.
+
+When running terminal-probe scenario capture/metrics:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
+```
+Customize the scenario file with real ON/OFF/paused selectors for your app.
 
 ## Commands
 
@@ -196,6 +214,14 @@ npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --t
 4. Snapshot:
 ```bash
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
+```
+5. Compare reference images:
+```bash
+npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+```
+6. WebGL diagnostics:
+```bash
+npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
 
 ## Retention
@@ -231,6 +257,36 @@ Fallback scan uses the same runtime target selection when available.
 
 For WebGL/render bugs, do not treat a black headless screenshot as the only evidence of regression or fix success.
 Confirm with browser-visible behavior or concrete runtime errors.
+At least one headed validation run is required for final success claims.
+
+## Reference Parity Artifacts
+
+For parity-sensitive work, keep one artifact folder containing:
+1. `runtime.json`
+2. `metrics.json`
+3. `summary.json`
+4. `actual.png`
+5. `reference.png`
+6. `diff.png` (when enabled)
+
+Default artifact path:
+`logs/browser-debug/<sessionId>/artifacts/<runId>/...`
+
+Terminal-probe pipeline artifact path (default):
+`logs/browser-debug/<sessionId>/terminal-probe/<timestamp>/...`
+
+## Skill Sync Workflow
+
+Local skill source of truth:
+`$CODEX_HOME/skills/fix-app-bugs` (fallback: `$HOME/.codex/skills/fix-app-bugs`)
+
+Mirror location in this repo:
+`skills/fix-app-bugs`
+
+Workflow:
+1. `npm run skill:sync:from-local`
+2. `npm run skill:sync:check`
+3. Commit/push
 
 ## Required Final Report Blocks
 
