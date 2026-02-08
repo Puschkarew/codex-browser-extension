@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Humans Debugger</title>
+    <style>
+      :root {
+        --bg: #f4f7f9;
+        --card: #ffffff;
+        --ink: #1c2d39;
+        --accent: #0b7285;
+        --danger: #c92a2a;
+      }
+      body {
+        width: 340px;
+        margin: 0;
+        background: radial-gradient(circle at top right, #ddeef3, var(--bg));
+        color: var(--ink);
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+      }
+      .wrap {
+        padding: 14px;
+      }
+      .card {
+        background: var(--card);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 8px 20px rgba(28, 45, 57, 0.08);
+      }
+      .title {
+        margin: 0 0 8px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .row {
+        margin: 5px 0;
+        font-size: 12px;
+        word-break: break-word;
+      }
+      .row strong {
+        font-weight: 600;
+      }
+      .status-ok {
+        color: #2b8a3e;
+      }
+      .status-bad {
+        color: var(--danger);
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      button {
+        border: none;
+        border-radius: 10px;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      #start {
+        background: var(--accent);
+        color: #fff;
+      }
+      #stop,
+      #refresh {
+        background: #d8e2e8;
+      }
+      #error {
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--danger);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1 class="title">Humans Debugger</h1>
+        <div class="row"><strong>Agent:</strong> <span id="agent">Checking...</span></div>
+        <div class="row"><strong>Core URL:</strong> <span id="core">-</span></div>
+        <div class="row"><strong>Project:</strong> <span id="project">-</span></div>
+        <div class="row"><strong>App URL:</strong> <span id="app">-</span></div>
+        <div class="row"><strong>Session:</strong> <span id="session">-</span></div>
+        <div class="row"><strong>Domain:</strong> <span id="domain">-</span></div>
+        <div class="actions">
+          <button id="start">Start</button>
+          <button id="stop">Stop</button>
+          <button id="refresh">Refresh</button>
+        </div>
+        <div id="error"></div>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

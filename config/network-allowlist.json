@@ -1,0 +1,11 @@
+{
+  "captureBodies": [
+    {
+      "method": "POST",
+      "urlPattern": "https://api.dev.example.com/v1/*",
+      "maxBytes": 32768,
+      "captureRequestBody": true,
+      "captureResponseBody": false
+    }
+  ]
+}
