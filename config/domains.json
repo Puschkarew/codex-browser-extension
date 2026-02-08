@@ -1,0 +1,4 @@
+{
+  "allowedDomains": ["localhost", "*.dev.example.com"],
+  "allowHttpLocalhost": true
+}

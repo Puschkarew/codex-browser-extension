@@ -1,0 +1,236 @@
+# Browser Debug Plugin Runbook
+
+This is the advanced operational runbook. Start with [README.md](README.md) for onboarding and quick setup.
+
+## Components
+
+1. `extensions/humans-debugger` (MV3 extension)
+2. `src/agent` (local Node.js agent)
+3. `logs/browser-debug` (JSONL logs + screenshots)
+
+## Per-Project Config
+
+Each target project should keep:
+`<project-root>/.codex/browser-debug.json`
+
+Example:
+```json
+{
+  "version": 1,
+  "projectId": "my-project",
+  "appUrl": "http://localhost:5173",
+  "agent": {
+    "host": "127.0.0.1",
+    "corePort": 4678,
+    "debugPort": 7331
+  },
+  "browser": {
+    "cdpPort": 9222
+  },
+  "capture": {
+    "allowedDomains": ["localhost"],
+    "networkAllowlist": []
+  },
+  "defaults": {
+    "queryWindowMinutes": 30
+  }
+}
+```
+
+## Start
+
+1. Install deps:
+```bash
+npm install
+```
+2. Start agent:
+```bash
+npm run agent:start
+```
+3. Start Chromium with CDP enabled (example):
+```bash
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+```
+4. Load unpacked extension from:
+`extensions/humans-debugger`
+
+## Core APIs
+
+1. `GET http://127.0.0.1:4678/health`
+2. `GET http://127.0.0.1:4678/runtime/config`
+3. `POST http://127.0.0.1:4678/runtime/config`
+4. `POST http://127.0.0.1:4678/session/start`
+5. `POST http://127.0.0.1:4678/session/stop`
+6. `POST http://127.0.0.1:4678/events` (requires `X-Ingest-Token`)
+7. `POST http://127.0.0.1:4678/command`
+8. `GET http://127.0.0.1:4678/events/query`
+
+`/health` includes readiness fields:
+1. `readiness.debug`: debug API registered.
+2. `readiness.query`: query API registered.
+3. `readiness.cdp`: deep probe result for `http://127.0.0.1:<cdpPort>/json/version`.
+4. `readiness.cdpReason`: probe error when unavailable.
+5. `readiness.cdpPort`: active runtime CDP port.
+
+## Fix App Bugs Compatibility
+
+Use compatibility endpoint:
+`POST http://127.0.0.1:7331/debug`
+
+Preflight endpoint:
+`OPTIONS http://127.0.0.1:7331/debug`
+
+Supported payload:
+```json
+{
+  "marker": "BUGFIX_TRACE",
+  "tag": "checkout-submit",
+  "event": "before-submit",
+  "traceId": "9b2a...",
+  "ts": "2026-02-06T13:00:00.000Z",
+  "data": {
+    "isValid": false,
+    "missingFields": 2
+  }
+}
+```
+
+Rules:
+1. `marker` must be `BUGFIX_TRACE`.
+2. Missing `ts` is filled by the server.
+3. Missing `sessionId` maps to active session or `manual-YYYY-MM-DD`.
+4. Content types: `application/json` and `text/plain` (JSON string body).
+5. Preflight responses are deterministic:
+   - allowlisted origin -> `204` with `Access-Control-Allow-*`.
+   - blocked origin -> `403` with `CORS_POLICY_BLOCKED_PATH`.
+
+## Strict Evidence Mode Contract (`fix-app-bugs`)
+
+Always run guarded bootstrap first:
+
+```bash
+python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --json
+```
+
+If actual app URL is known:
+
+```bash
+python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --actual-app-url <url> --json
+```
+
+Branch from machine-readable verdict:
+1. Browser instrumentation is allowed only when `browserInstrumentation.canInstrumentFromBrowser = true`.
+2. If `false` or `bootstrap.status = fallback`, mode is `terminal-probe`.
+3. In `terminal-probe`, do not add page-side `fetch(debugEndpoint)` instrumentation.
+
+Use `checks.appUrl` diagnostics as a mini-checklist:
+1. `checks.appUrl.checklist` for pass/fail steps.
+2. `checks.appUrl.recommendedCommands` for re-run and optional auto-fix commands.
+3. `checks.appUrl.canAutoFix` + `checks.appUrl.autoFixMode` to confirm that auto-fix is explicit-flag only.
+
+Playwright compatibility diagnostics are also machine-readable:
+1. `checks.tools.playwright.wrapperSmoke`
+2. `checks.tools.playwright.npxSmoke`
+3. `checks.tools.playwright.selectedCommand`
+4. `checks.tools.playwright.selectedBinary`
+
+## Query Logs by Reproduction Window
+
+HTTP:
+```bash
+curl "http://127.0.0.1:4678/events/query?from=2026-02-06T12:00:00.000Z&to=2026-02-06T12:30:00.000Z&tag=checkout-submit&limit=500"
+```
+
+CLI:
+```bash
+npm run agent:query -- --from 2026-02-06T12:00:00.000Z --to 2026-02-06T12:30:00.000Z --tag checkout-submit
+```
+
+Correlation strategy:
+1. Primary key: `traceId`
+2. Secondary: `tag`
+3. Final filter: reproduction time window (`from/to`)
+
+## Switch Project Flow
+
+1. In target project, update `.codex/browser-debug.json` with project URL and ports.
+2. For local dev, keep both `localhost` and `127.0.0.1` in `capture.allowedDomains`.
+3. Run guarded skill bootstrap:
+```bash
+python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --json
+```
+4. If you know the real page URL:
+```bash
+python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --actual-app-url <url> --json
+```
+If `checks.appUrl.status = mismatch`, run:
+```bash
+python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --actual-app-url <url> --apply-recommended --json
+```
+5. If guarded bootstrap reports `bootstrap.status = ok`, runtime config is managed through the underlying bootstrap.
+6. If guarded bootstrap reports `bootstrap.status = fallback`, continue in terminal-probe mode.
+7. Extension auto-discovers core port (`4678..4698`), fetches runtime config, and hot-updates capture rules when core API is reachable.
+
+## Commands
+
+1. Reload:
+```bash
+npm run agent:cmd -- --session <id> --do reload
+```
+2. Click:
+```bash
+npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
+```
+3. Type:
+```bash
+npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
+```
+4. Snapshot:
+```bash
+npm run agent:cmd -- --session <id> --do snapshot --fullPage
+```
+
+## Retention
+
+1. Logs and screenshot artifacts are stored under `logs/browser-debug`.
+2. Hourly cleanup removes entries older than 7 days.
+
+## Instrumentation Cleanup Check
+
+After bugfix work, run guarded cleanup:
+
+```bash
+bash /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/cleanup_guarded.sh .
+```
+
+Strict mode:
+
+```bash
+bash /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/cleanup_guarded.sh . --strict
+```
+
+Strict mode scans runtime code paths only (for example `src`, `app`, `server`, `test`, `tests`, `packages/*/src`) and ignores documentation-only markers in markdown feedback files.
+
+If `check_instrumentation_cleanup.sh` is missing, guarded cleanup automatically falls back to:
+
+```bash
+rg -n "BUGFIX_TRACE|debugEndpoint|traceId|issue tag" src test
+```
+
+Fallback scan uses the same runtime target selection when available.
+
+## WebGL Evidence Note
+
+For WebGL/render bugs, do not treat a black headless screenshot as the only evidence of regression or fix success.
+Confirm with browser-visible behavior or concrete runtime errors.
+
+## Required Final Report Blocks
+
+Every `fix-app-bugs` run should end with these five blocks:
+1. `Root Cause`
+2. `Patch`
+3. `Validation`
+4. `Instrumentation Status`
+5. `Residual Risk`
+
+If Browser Debug bootstrap was unavailable, state it explicitly in `Validation`.
