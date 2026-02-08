@@ -11,7 +11,14 @@ Use this repository to collect reproducible browser runtime evidence, run contro
 - `config`: default allowlist and network capture rules.
 - `logs/browser-debug`: JSONL logs and snapshot artifacts.
 
-## Standard Workflow
+## Mode Declaration
+Before execution, declare one mode for the current run:
+- `Core mode`
+- `Enhanced mode (fix-app-bugs optional addon)`
+
+If no mode is explicitly selected, default to `Core mode`.
+
+## Baseline Workflow (All Modes)
 1. Install dependencies:
 ```bash
 npm install
@@ -28,56 +35,36 @@ npm run agent:start
 ```text
 extensions/humans-debugger
 ```
-5. Ensure `CODEX_HOME` is set (default to `~/.codex` when missing):
+
+## Core Mode Policy
+- No guarded bootstrap is required.
+- Use standard APIs and CLI commands (`/health`, `/events/query`, `/command`, `npm run agent:*`).
+- Use evidence and reporting format appropriate for the task; strict 5-block report format is not mandatory unless explicitly requested.
+
+## Enhanced Mode Policy (fix-app-bugs optional addon)
+Use this mode when strict reproducibility and machine-verifiable bugfix flows are required.
+
+### Instrumentation Gate (Enhanced mode only)
+1. Ensure `CODEX_HOME` is set:
 ```bash
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 ```
-6. Run guarded bootstrap for target project:
+2. Run guarded bootstrap first:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
 ```
-7. If the real app URL is known:
+3. If the real app URL is known:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
 ```
+4. Browser instrumentation is allowed only when `browserInstrumentation.canInstrumentFromBrowser = true`.
+5. If `false` or `bootstrap.status = fallback`, switch to `terminal-probe` mode.
+6. In `terminal-probe` mode, do not add page-side `fetch(debugEndpoint)` calls.
+7. If `checks.appUrl.status = mismatch`, use `checks.appUrl.checklist` and `checks.appUrl.recommendedCommands`.
+8. `checks.appUrl.autoFixMode` must stay explicit-flag only (`--apply-recommended`).
+9. Read Playwright diagnostics from `checks.tools.playwright.wrapperSmoke` and `checks.tools.playwright.npxSmoke`.
 
-## Instrumentation Gate
-Always branch behavior from guarded bootstrap output.
-
-1. Browser instrumentation is allowed only when `browserInstrumentation.canInstrumentFromBrowser = true`.
-2. If `false` or `bootstrap.status = fallback`, switch to `terminal-probe` mode.
-3. In `terminal-probe` mode, do not add page-side `fetch(debugEndpoint)` calls.
-4. If `checks.appUrl.status = mismatch`, use `checks.appUrl.checklist` and `checks.appUrl.recommendedCommands`.
-5. `checks.appUrl.autoFixMode` must stay explicit-flag only (`--apply-recommended`).
-6. Read Playwright diagnostics from `checks.tools.playwright.wrapperSmoke` and `checks.tools.playwright.npxSmoke`.
-
-## Operating Modes
-### Browser instrumentation mode
-- Use extension or `/debug` instrumentation when gate conditions permit it.
-- Keep evidence tied to reproduction windows, tags, and trace IDs.
-
-### Terminal-probe mode
-- Use CLI/API-only probing and command execution.
-- Do not inject new page-side debug ingestion calls.
-- Treat guarded bootstrap fallback as authoritative.
-
-## Approved Commands
-- Start agent: `npm run agent:start`
-- Stop current session: `npm run agent:stop`
-- Query events by window:
-```bash
-npm run agent:query -- --from <ISO> --to <ISO> --tag <tag>
-```
-- Execute browser command:
-```bash
-npm run agent:cmd -- --session <id> --do reload
-npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
-npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
-npm run agent:cmd -- --session <id> --do snapshot --fullPage
-```
-- Run tests: `npm test`
-
-## Cleanup and Evidence Rules
+### Cleanup and Evidence Rules (Enhanced mode only)
 Run guarded cleanup after bugfix work:
 
 ```bash
@@ -97,8 +84,8 @@ Notes:
 rg -n "BUGFIX_TRACE|debugEndpoint|traceId|issue tag" src test
 ```
 
-## Required Final Report Format
-Every `fix-app-bugs` run must end with these blocks, in this order:
+### Required Final Report Format (Enhanced mode only)
+Every Enhanced `fix-app-bugs` run must end with these blocks, in this order:
 1. `Root Cause`
 2. `Patch`
 3. `Validation`
@@ -107,12 +94,39 @@ Every `fix-app-bugs` run must end with these blocks, in this order:
 
 If guarded bootstrap fell back, state it explicitly in `Validation`.
 
-## Guardrails
-- Never add page-side `fetch(debugEndpoint)` instrumentation in `terminal-probe` mode.
-- For WebGL/render bugs, do not treat black headless screenshots as sole proof.
-- Declare success only with browser-visible confirmation or concrete runtime errors.
+### WebGL Evidence Guardrail (Enhanced mode only)
+For WebGL/render bugs, do not treat black headless screenshots as sole proof.
+Declare success only with browser-visible confirmation or concrete runtime errors.
+
+## Approved Commands
+### Commands valid in both modes
+- Start agent: `npm run agent:start`
+- Stop current session: `npm run agent:stop`
+- Query events by window:
+```bash
+npm run agent:query -- --from <ISO> --to <ISO> --tag <tag>
+```
+- Execute browser command:
+```bash
+npm run agent:cmd -- --session <id> --do reload
+npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
+npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
+npm run agent:cmd -- --session <id> --do snapshot --fullPage
+```
+- Run tests: `npm test`
+
+### Enhanced-only helper commands
+- Guarded bootstrap:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
+```
+- Guarded cleanup:
+```bash
+bash "$CODEX_HOME/skills/fix-app-bugs/scripts/cleanup_guarded.sh" .
+```
 
 ## Notes for Contributors
 - Keep commands aligned with `package.json` scripts and current API contracts.
-- Prefer deterministic, machine-readable outputs for automation steps.
-- When changing workflows, update both `README.md` and `README-debug.md`.
+- Keep mode language explicit: `Core mode` vs `Enhanced mode (fix-app-bugs optional addon)`.
+- Do not claim `fix-app-bugs` is mandatory for plugin operation.
+- When changing workflows, update `README.md`, `README-debug.md`, and `AGENTS.md` together.

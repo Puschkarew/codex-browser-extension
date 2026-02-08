@@ -1,6 +1,7 @@
 # Browser Debug Plugin Runbook
 
-This is the advanced operational runbook. Start with [README.md](README.md) for onboarding and quick setup.
+This is the advanced operational runbook for `Enhanced mode (fix-app-bugs optional addon)`.
+For default standalone usage, start with [README.md](README.md) and follow `Core mode`.
 
 ## Components
 
@@ -72,7 +73,7 @@ npm run agent:start
 4. `readiness.cdpReason`: probe error when unavailable.
 5. `readiness.cdpPort`: active runtime CDP port.
 
-## Fix App Bugs Compatibility
+## Enhanced Mode Compatibility (fix-app-bugs)
 
 Use compatibility endpoint:
 `POST http://127.0.0.1:7331/debug`
@@ -106,17 +107,24 @@ Rules:
 
 ## Strict Evidence Mode Contract (`fix-app-bugs`)
 
+Ensure `CODEX_HOME` is set:
+```bash
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+```
+
 Always run guarded bootstrap first:
 
 ```bash
-python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --json
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
 ```
 
 If actual app URL is known:
 
 ```bash
-python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --actual-app-url <url> --json
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
 ```
+
+If Enhanced prerequisites are unavailable, continue in `Core mode` from [README.md](README.md).
 
 Branch from machine-readable verdict:
 1. Browser instrumentation is allowed only when `browserInstrumentation.canInstrumentFromBrowser = true`.
@@ -157,15 +165,15 @@ Correlation strategy:
 2. For local dev, keep both `localhost` and `127.0.0.1` in `capture.allowedDomains`.
 3. Run guarded skill bootstrap:
 ```bash
-python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --json
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
 ```
 4. If you know the real page URL:
 ```bash
-python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --actual-app-url <url> --json
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
 ```
 If `checks.appUrl.status = mismatch`, run:
 ```bash
-python3 /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/bootstrap_guarded.py --project-root <project-root> --actual-app-url <url> --apply-recommended --json
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --apply-recommended --json
 ```
 5. If guarded bootstrap reports `bootstrap.status = ok`, runtime config is managed through the underlying bootstrap.
 6. If guarded bootstrap reports `bootstrap.status = fallback`, continue in terminal-probe mode.
@@ -200,13 +208,13 @@ npm run agent:cmd -- --session <id> --do snapshot --fullPage
 After bugfix work, run guarded cleanup:
 
 ```bash
-bash /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/cleanup_guarded.sh .
+bash "$CODEX_HOME/skills/fix-app-bugs/scripts/cleanup_guarded.sh" .
 ```
 
 Strict mode:
 
 ```bash
-bash /Users/vladimirpuskarev/.codex/skills/fix-app-bugs/scripts/cleanup_guarded.sh . --strict
+bash "$CODEX_HOME/skills/fix-app-bugs/scripts/cleanup_guarded.sh" . --strict
 ```
 
 Strict mode scans runtime code paths only (for example `src`, `app`, `server`, `test`, `tests`, `packages/*/src`) and ignores documentation-only markers in markdown feedback files.

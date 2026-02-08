@@ -4,14 +4,29 @@
 This repository contains a local browser debugging toolkit for reproducible frontend investigations.
 It combines a Chrome MV3 extension, a local Node.js agent, and JSONL log storage to capture runtime evidence, run browser actions, and query traces by time window.
 
+## Operating Modes
+
+| Dimension | Core mode | Enhanced mode (fix-app-bugs optional addon) |
+| --- | --- | --- |
+| Goal | Fast local debugging with direct extension + agent workflow. | Strict, machine-verifiable bugfix workflow with guarded instrumentation decisions. |
+| Required tools | Node.js, Chrome with CDP, extension. | Core mode tools + `fix-app-bugs` skill scripts. |
+| Required bootstrap | No guarded bootstrap required. | Guarded bootstrap required before evidence collection decisions. |
+| Evidence/report strictness | Standard debugging evidence; report format is optional. | Strict evidence mode, cleanup checks, and required final report blocks. |
+| Best for | Manual investigation, local iteration, general diagnostics. | Reproducible bugfix runs with explicit instrumentation gates and auditability. |
+
+`Core mode` is the default and does not require `fix-app-bugs`.
+`Enhanced mode (fix-app-bugs optional addon)` adds guarded bootstrap, strict evidence, and cleanup/report discipline.
+
 ## Who It Is For
 - Developers who need reliable runtime evidence for frontend bug investigations.
-- AI agents that must follow deterministic debugging workflows and strict instrumentation gates.
+- AI agents that must follow deterministic debugging workflows.
 
 ## Architecture
 - `extensions/humans-debugger`: MV3 extension (background service worker, popup, content script).
 - `src/agent`: local Fastify-based agent with Core API (`4678` by default) and Debug API (`7331` by default).
 - `logs/browser-debug`: local JSONL event storage and screenshot artifacts.
+
+Mode note: runtime architecture is identical in both modes; Enhanced mode adds external workflow controls on top.
 
 ## How It Works
 1. The extension discovers an available Core API on `127.0.0.1` (ports `4678..4698`) and syncs runtime config.
@@ -21,7 +36,9 @@ It combines a Chrome MV3 extension, a local Node.js agent, and JSONL log storage
 5. The agent normalizes payloads, redacts sensitive data, writes JSONL logs, and stores snapshots.
 6. Operators query logs via `/events/query` or `npm run agent:query`, and run CDP commands via `/command` or `npm run agent:cmd`.
 
-## Quick Start
+Mode note: Enhanced mode gates instrumentation decisions through guarded bootstrap; Core mode can operate directly.
+
+## Quick Start (Core mode)
 1. Install dependencies:
 ```bash
 npm install
@@ -38,6 +55,23 @@ npm run agent:start
 ```text
 extensions/humans-debugger
 ```
+
+## Quick Start (Enhanced mode, optional)
+1. Complete all Core mode steps first.
+2. Ensure `CODEX_HOME` is set:
+```bash
+export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
+```
+3. Run guarded bootstrap for target project:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --json
+```
+4. If the real app URL is known:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
+```
+
+If guarded bootstrap falls back or Enhanced prerequisites are unavailable, continue in Core mode.
 
 ## Runtime Configuration
 Each target project can provide `.codex/browser-debug.json`:
@@ -65,7 +99,12 @@ Each target project can provide `.codex/browser-debug.json`:
 }
 ```
 
+## Mode Selection Guidance
+- Choose `Core mode` for local/manual debugging and fast iteration.
+- Choose `Enhanced mode (fix-app-bugs optional addon)` when you need strict reproducibility, explicit instrumentation gates, and machine-verifiable bugfix reporting.
+
 ## Core Commands
+These commands are valid in both modes:
 - Start agent: `npm run agent:start`
 - Stop active session: `npm run agent:stop`
 - Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot>`
@@ -96,6 +135,8 @@ Default base URLs:
 | `/command` | `POST` | Execute CDP command (`reload`, `click`, `type`, `snapshot`). |
 | `/debug` | `OPTIONS`, `POST` | Preflight + `BUGFIX_TRACE` ingestion with origin allowlist checks. |
 
+Mode note: API surface stays the same in both modes; Enhanced mode imposes stricter workflow rules around when and how instrumentation is used.
+
 ## Privacy and Safety
 - The agent binds to loopback (`127.0.0.1`) by default and is intended for local debugging.
 - Domain and origin allowlists gate session start and `/debug` ingestion.
@@ -107,6 +148,7 @@ Default base URLs:
 - `TARGET_NOT_FOUND`: ensure the active tab URL matches the requested `tabUrl` pattern.
 - `DOMAIN_NOT_ALLOWED` / `ORIGIN_NOT_ALLOWED` / `CORS_POLICY_BLOCKED_PATH`: update `capture.allowedDomains` and refresh runtime config.
 - `SESSION_ALREADY_RUNNING`: stop the active session first (`npm run agent:stop` or `/session/stop`).
+- Missing `fix-app-bugs` tooling is not a blocker for Core mode; run Core workflow directly.
 
 Quick check:
 ```bash
@@ -114,5 +156,6 @@ curl http://127.0.0.1:4678/health
 ```
 
 ## Documentation Map
-- Advanced operational runbook: [README-debug.md](README-debug.md)
-- AI-agent workflow rules: [AGENTS.md](AGENTS.md)
+- Core onboarding and dual-mode entrypoint: [README.md](README.md)
+- Enhanced deep runbook: [README-debug.md](README-debug.md)
+- Mode-gated AI workflow policy: [AGENTS.md](AGENTS.md)
