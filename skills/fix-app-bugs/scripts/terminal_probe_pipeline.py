@@ -141,6 +141,30 @@ def command_payload_from_step(step: Dict[str, Any], default_timeout_ms: int) -> 
     if command == "reload":
         return command, {"waitUntil": "load", "timeoutMs": timeout_ms}
 
+    if command == "wait":
+        wait_ms_raw = step.get("ms", timeout_ms)
+        wait_ms = wait_ms_raw if isinstance(wait_ms_raw, int) and wait_ms_raw > 0 else timeout_ms
+        return command, {"ms": wait_ms}
+
+    if command == "navigate":
+        url = step.get("url")
+        if not isinstance(url, str) or not url:
+            raise RuntimeError("navigate step requires non-empty string 'url'")
+        return command, {"url": url, "waitUntil": "load", "timeoutMs": timeout_ms}
+
+    if command == "evaluate":
+        expression = step.get("expression")
+        if not isinstance(expression, str) or not expression.strip():
+            raise RuntimeError("evaluate step requires non-empty string 'expression'")
+        await_promise = step.get("awaitPromise", True)
+        return_by_value = step.get("returnByValue", True)
+        return command, {
+            "expression": expression,
+            "awaitPromise": bool(await_promise),
+            "returnByValue": bool(return_by_value),
+            "timeoutMs": timeout_ms,
+        }
+
     if command == "click":
         selector = step.get("selector")
         if not isinstance(selector, str) or not selector:
@@ -165,25 +189,29 @@ def command_payload_from_step(step: Dict[str, Any], default_timeout_ms: int) -> 
         return command, {"fullPage": full_page, "timeoutMs": timeout_ms}
 
     raise RuntimeError(
-        f"Unsupported command '{command}'. Allowed commands: reload, click, type, snapshot, webgl-diagnostics"
+        "Unsupported command "
+        f"'{command}'. Allowed commands: reload, wait, navigate, evaluate, click, type, snapshot, webgl-diagnostics"
     )
 
 
 def run_core_command(
     core_base_url: str,
-    session_id: str,
+    session_id: Optional[str],
     command: str,
     payload: Dict[str, Any],
     timeout_seconds: float,
 ) -> Dict[str, Any]:
+    request_payload: Dict[str, Any] = {
+        "command": command,
+        "payload": payload,
+    }
+    if isinstance(session_id, str) and session_id:
+        request_payload["sessionId"] = session_id
+
     response = http_json(
         "POST",
         f"{core_base_url}/command",
-        payload={
-            "sessionId": session_id,
-            "command": command,
-            "payload": payload,
-        },
+        payload=request_payload,
         timeout=timeout_seconds,
     )
 
@@ -221,6 +249,53 @@ def run_core_command(
         "status": response.get("status"),
         "result": result,
         "response": response_body,
+    }
+
+
+def ensure_session(
+    core_base_url: str,
+    tab_url: str,
+    debug_port: int,
+    reuse_active: bool,
+    timeout_seconds: float,
+) -> Dict[str, Any]:
+    response = http_json(
+        "POST",
+        f"{core_base_url}/session/ensure",
+        payload={
+            "tabUrl": tab_url,
+            "debugPort": debug_port,
+            "reuseActive": reuse_active,
+        },
+        timeout=timeout_seconds,
+    )
+    body = response.get("json")
+    if not response.get("ok"):
+        error_code = None
+        error_message = None
+        if isinstance(body, dict):
+            error = body.get("error")
+            if isinstance(error, dict):
+                error_code = error.get("code")
+                error_message = error.get("message")
+        raise RuntimeError(
+            "session ensure failed: "
+            f"status={response.get('status')} "
+            f"code={error_code} message={error_message or response.get('error') or response.get('body')}"
+        )
+
+    if not isinstance(body, dict):
+        raise RuntimeError("session ensure returned non-JSON payload")
+
+    session_id = body.get("sessionId")
+    if not isinstance(session_id, str) or not session_id:
+        raise RuntimeError("session ensure returned invalid sessionId")
+
+    return {
+        "sessionId": session_id,
+        "state": body.get("state"),
+        "attachedTargetUrl": body.get("attachedTargetUrl"),
+        "reused": bool(body.get("reused")),
     }
 
 
@@ -363,6 +438,27 @@ def average(values: List[float]) -> Optional[float]:
     if not values:
         return None
     return sum(values) / len(values)
+
+
+def extract_framebuffer_non_black_ratio(runtime_entry: Dict[str, Any]) -> Optional[float]:
+    commands = runtime_entry.get("commands")
+    if not isinstance(commands, list):
+        return None
+    for command_entry in commands:
+        if not isinstance(command_entry, dict):
+            continue
+        if command_entry.get("command") != "webgl-diagnostics":
+            continue
+        command_result = command_entry.get("result")
+        if not isinstance(command_result, dict):
+            continue
+        scene = command_result.get("scene")
+        if not isinstance(scene, dict):
+            continue
+        non_black_ratio = scene.get("nonBlackRatio")
+        if isinstance(non_black_ratio, (int, float)):
+            return float(non_black_ratio)
+    return None
 
 
 def prepare_output_dir(project_root: Path, output_dir: Optional[str], session_id: str) -> Path:
@@ -540,12 +636,14 @@ def run_pipeline(
                 if isinstance(artifacts_value, dict):
                     compare_artifacts = artifacts_value
 
+        framebuffer_non_black_ratio = extract_framebuffer_non_black_ratio(runtime_entry)
         metrics_entry: Dict[str, Any] = {
             "name": scenario_name,
             "ok": not scenario_failed,
             "snapshotPath": snapshot_path,
             "referenceImagePath": reference_image_path,
             "imageMetrics": image_metrics,
+            "framebufferNonBlackRatio": framebuffer_non_black_ratio,
             "compareMetrics": compare_metrics,
             "compareArtifacts": compare_artifacts,
             "errors": list(runtime_entry["errors"]),
@@ -589,6 +687,21 @@ def run_pipeline(
         and isinstance(entry["imageMetrics"].get("nonBlackRatio"), (int, float))
         and float(entry["imageMetrics"]["nonBlackRatio"]) < 0.01
     ]
+    framebuffer_metric_mismatches = [
+        entry["name"]
+        for entry in metrics_scenarios
+        if isinstance(entry.get("framebufferNonBlackRatio"), (int, float))
+        and isinstance(entry.get("imageMetrics"), dict)
+        and isinstance(entry["imageMetrics"].get("nonBlackRatio"), (int, float))
+        and float(entry["framebufferNonBlackRatio"]) < 0.01
+        and float(entry["imageMetrics"]["nonBlackRatio"]) >= 0.01
+    ]
+    if framebuffer_metric_mismatches:
+        warnings.append(
+            "Detected framebuffer/screenshot mismatch in scenarios: "
+            + ", ".join(framebuffer_metric_mismatches)
+            + ". Use screenshot metrics + runtime exceptions as source of truth for black-screen verdict."
+        )
 
     overall_ok = all(bool(entry.get("ok")) for entry in runtime_scenarios)
 
@@ -624,6 +737,7 @@ def run_pipeline(
             "maeRgb": average(mae_rgb_values),
         },
         "blackFrameCandidates": black_frame_candidates,
+        "framebufferMetricMismatches": framebuffer_metric_mismatches,
         "warnings": warnings,
     }
 
@@ -655,7 +769,18 @@ def main() -> int:
     )
     parser.add_argument("--project-root", default=os.getcwd(), help="Target project root (default: cwd)")
     parser.add_argument("--core-base-url", default=DEFAULT_CORE_BASE_URL, help="Core API base URL")
-    parser.add_argument("--session-id", required=True, help="Active Browser Debug session id")
+    parser.add_argument(
+        "--session-id",
+        required=True,
+        help="Active Browser Debug session id, or 'auto' to resolve via /session/ensure",
+    )
+    parser.add_argument("--tab-url", default=None, help="Required with --session-id auto")
+    parser.add_argument("--debug-port", type=int, default=9222, help="CDP port for --session-id auto")
+    parser.add_argument(
+        "--no-reuse-active",
+        action="store_true",
+        help="When using --session-id auto, do not reuse active session",
+    )
     parser.add_argument("--scenarios", required=True, help="Path to scenario JSON file")
     parser.add_argument("--output-dir", default=None, help="Optional output directory for artifact bundle")
     parser.add_argument("--timeout-ms", type=int, default=15000, help="Default command timeout in milliseconds")
@@ -670,15 +795,47 @@ def main() -> int:
         return 1
 
     try:
+        requested_session_id = str(args.session_id).strip()
+        resolved_session: Dict[str, Any] = {
+            "requestedSessionId": requested_session_id,
+            "resolvedSessionId": requested_session_id,
+            "auto": False,
+            "reused": None,
+            "tabUrl": None,
+        }
+        if requested_session_id.lower() == "auto":
+            tab_url = str(args.tab_url).strip() if isinstance(args.tab_url, str) else ""
+            if not tab_url:
+                print(
+                    "terminal_probe_pipeline.py failed: --tab-url is required when --session-id auto",
+                    file=sys.stderr,
+                )
+                return 1
+            ensured = ensure_session(
+                core_base_url=str(args.core_base_url),
+                tab_url=tab_url,
+                debug_port=max(int(args.debug_port), 1),
+                reuse_active=not bool(args.no_reuse_active),
+                timeout_seconds=max(float(args.timeout_ms) / 1000.0, 3.0),
+            )
+            resolved_session = {
+                "requestedSessionId": requested_session_id,
+                "resolvedSessionId": ensured["sessionId"],
+                "auto": True,
+                "reused": ensured.get("reused"),
+                "tabUrl": ensured.get("attachedTargetUrl") or tab_url,
+            }
+
         scenarios = load_scenarios(scenarios_path)
-        output_dir = prepare_output_dir(project_root, args.output_dir, args.session_id)
+        output_dir = prepare_output_dir(project_root, args.output_dir, str(resolved_session["resolvedSessionId"]))
         result = run_pipeline(
             core_base_url=str(args.core_base_url),
-            session_id=str(args.session_id),
+            session_id=str(resolved_session["resolvedSessionId"]),
             scenarios=scenarios,
             output_dir=output_dir,
             timeout_ms=max(int(args.timeout_ms), 1000),
         )
+        result["resolvedSession"] = resolved_session
     except Exception as exc:  # noqa: BLE001
         print(f"terminal_probe_pipeline.py failed: {exc}", file=sys.stderr)
         return 1
@@ -693,6 +850,8 @@ def main() -> int:
         print(f"- runtimeJsonPath: {result['runtimeJsonPath']}")
         print(f"- metricsJsonPath: {result['metricsJsonPath']}")
         print(f"- summaryJsonPath: {result['summaryJsonPath']}")
+        if isinstance(result.get("resolvedSession"), dict):
+            print(f"- resolvedSession: {json.dumps(result['resolvedSession'], ensure_ascii=True)}")
         if result["warnings"]:
             print(f"- warnings: {json.dumps(result['warnings'], ensure_ascii=True)}")
 

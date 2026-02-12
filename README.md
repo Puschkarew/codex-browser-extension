@@ -108,11 +108,19 @@ Each target project can provide `.codex/browser-debug.json`:
 - Choose `Core mode` for local/manual debugging and fast iteration.
 - Choose `Enhanced mode (fix-app-bugs optional addon)` when you need strict reproducibility, explicit instrumentation gates, and machine-verifiable bugfix reporting.
 
+### Quick Decision Tree
+1. Start with `Core mode` for exploratory debugging and fast command loops.
+2. Move to `Enhanced mode` when you need guarded bootstrap verdicts and strict final reports.
+3. If `Enhanced` returns `bootstrap.status = fallback` or `canInstrumentFromBrowser = false`, use `terminal-probe` immediately.
+4. For parity-sensitive work, capture one artifact bundle per checkpoint and keep headed evidence.
+5. If parity does not improve after 3 cycles or 90 minutes, stop and switch to rollback/retrospective planning.
+
 ## Core Commands
 These commands are valid in both modes:
 - Start agent: `npm run agent:start`
 - Stop active session: `npm run agent:stop`
 - Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot|compare-reference|webgl-diagnostics>`
+- Capture one parity bundle: `npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline`
 - Query logs: `npm run agent:query -- --from <ISO> --to <ISO> [--tag <tag>]`
 - Run tests: `npm test`
 
@@ -123,6 +131,7 @@ npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save
 npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
 npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline
 npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
 

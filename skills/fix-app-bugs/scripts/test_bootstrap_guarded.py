@@ -43,6 +43,8 @@ def assert_fallback(payload: dict, reason_contains: str) -> None:
     assert payload["browserInstrumentation"]["mode"] == "terminal-probe", payload
     assert payload["debugEndpoint"] is None, payload
     assert payload["queryEndpoint"] is None, payload
+    assert payload["session"]["active"] is False, payload
+    assert payload["session"]["sessionId"] is None, payload
 
 
 def main() -> int:
@@ -100,6 +102,7 @@ def main() -> int:
         assert payload["browserInstrumentation"]["mode"] == "browser-fetch", payload
         assert payload["debugEndpoint"] == "http://127.0.0.1:7331/debug", payload
         assert payload["queryEndpoint"] == "http://127.0.0.1:4678/events/query", payload
+        assert payload["session"]["active"] is False, payload
 
     print("bootstrap_guarded smoke checks passed")
     return 0

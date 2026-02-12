@@ -575,12 +575,18 @@ def build_recommended_diff(config_path: Path, original_config: Dict[str, Any], r
     return "".join(diff)
 
 
-def start_agent(plugin_root: Path, core_port: int, debug_port: int) -> None:
+def start_agent(plugin_root: Path, project_root: Path, core_port: int, debug_port: int) -> Path:
+    log_dir = project_root / ".codex"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "browser-debug-agent.log"
+
     env = os.environ.copy()
     env["CORE_PORT"] = str(core_port)
     env["DEBUG_PORT"] = str(debug_port)
+    env["AGENT_FATAL_LOG"] = str(log_path)
 
-    with open(os.devnull, "wb") as sink:
+    with open(log_path, "ab") as sink:
+        sink.write(f"\n[{iso_now()}] starting browser-debug agent\n".encode("utf-8"))
         subprocess.Popen(
             ["npm", "run", "agent:start"],
             cwd=str(plugin_root),
@@ -589,6 +595,7 @@ def start_agent(plugin_root: Path, core_port: int, debug_port: int) -> None:
             stderr=sink,
             start_new_session=True,
         )
+    return log_path
 
 
 def apply_runtime_config(core_base_url: str, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -610,7 +617,11 @@ def check_npx() -> Dict[str, Any]:
     return {"ok": False, "path": None, "reason": "npx command not found"}
 
 
-def run_subprocess_smoke(command: List[str], timeout_seconds: float = 8.0) -> Dict[str, Any]:
+def run_subprocess_smoke(
+    command: List[str],
+    timeout_seconds: float = 8.0,
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     try:
         completed = subprocess.run(
             command,
@@ -618,6 +629,7 @@ def run_subprocess_smoke(command: List[str], timeout_seconds: float = 8.0) -> Di
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return {
@@ -649,6 +661,92 @@ def run_subprocess_smoke(command: List[str], timeout_seconds: float = 8.0) -> Di
         "ok": False,
         "exitCode": completed.returncode,
         "reason": reason,
+    }
+
+
+def build_session_summary(health_payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    active_session = health_payload.get("activeSession") if isinstance(health_payload, dict) else None
+    if isinstance(active_session, dict):
+        session_id = active_session.get("sessionId")
+        session_state = active_session.get("state")
+        session_tab_url = active_session.get("tabUrl")
+        return {
+            "active": True,
+            "sessionId": str(session_id) if isinstance(session_id, str) else None,
+            "tabUrl": str(session_tab_url) if isinstance(session_tab_url, str) else None,
+            "state": str(session_state) if isinstance(session_state, str) else None,
+        }
+    return {
+        "active": False,
+        "sessionId": None,
+        "tabUrl": None,
+        "state": None,
+    }
+
+
+def build_core_health_check(core_base_url: str, health_payload: Optional[Dict[str, Any]], reason: Optional[str] = None) -> Dict[str, Any]:
+    return {
+        "ok": isinstance(health_payload, dict),
+        "coreBaseUrl": core_base_url,
+        "status": health_payload.get("status") if isinstance(health_payload, dict) else None,
+        "version": health_payload.get("version") if isinstance(health_payload, dict) else None,
+        "activeSession": build_session_summary(health_payload),
+        "readiness": health_payload.get("readiness") if isinstance(health_payload, dict) else None,
+        "reason": reason,
+    }
+
+
+def probe_command_endpoint(core_base_url: str) -> Dict[str, Any]:
+    response = http_request(
+        "POST",
+        f"{core_base_url}/command",
+        payload={"command": "noop", "payload": {}},
+        timeout=2.0,
+    )
+    status = response.get("status")
+    ok = isinstance(status, int) and status in {400, 401, 404, 409, 422, 503}
+    reason = None if ok else (response.get("error") or response.get("body") or f"unexpected status: {status}")
+    if isinstance(reason, str) and len(reason) > 240:
+        reason = f"{reason[:240]}..."
+    return {
+        "ok": ok,
+        "status": status,
+        "reason": reason,
+    }
+
+
+def run_playwright_functional_smoke(npx_path: str) -> Dict[str, Any]:
+    smoke_mode = os.environ.get("PLAYWRIGHT_FUNCTIONAL_SMOKE", "").strip().lower()
+    if smoke_mode in {"0", "false", "off", "skip"}:
+        return {
+            "ok": False,
+            "skipped": True,
+            "reason": "functional smoke skipped by PLAYWRIGHT_FUNCTIONAL_SMOKE",
+            "command": None,
+            "exitCode": None,
+        }
+
+    expression = (
+        "const { chromium } = require('playwright');"
+        "(async()=>{"
+        "const browser=await chromium.launch({headless:true});"
+        "const page=await browser.newPage();"
+        "await page.goto('data:text/html,<html><body>playwright-functional-smoke</body></html>');"
+        "const text=await page.textContent('body');"
+        "if(!text||text.indexOf('playwright-functional-smoke')===-1){throw new Error('navigation-check-failed');}"
+        "const png=await page.screenshot({type:'png'});"
+        "if(!png||!png.length){throw new Error('empty-screenshot');}"
+        "await browser.close();"
+        "})().catch((error)=>{console.error(error&&error.stack?error.stack:String(error));process.exit(1);});"
+    )
+    command = [npx_path, "--yes", "--package", "playwright", "node", "-e", expression]
+    smoke = run_subprocess_smoke(command, timeout_seconds=25.0)
+    return {
+        "ok": bool(smoke.get("ok")),
+        "skipped": False,
+        "reason": smoke.get("reason"),
+        "command": render_shell_command(command),
+        "exitCode": smoke.get("exitCode"),
     }
 
 
@@ -717,8 +815,35 @@ def check_playwright_tool(npx_check: Dict[str, Any]) -> Dict[str, Any]:
                 }
                 npx_command = npx_primary
 
+    functional_smoke: Dict[str, Any]
+    if npx_check.get("ok") and npx_path:
+        functional_smoke = run_playwright_functional_smoke(npx_path)
+    else:
+        functional_smoke = {
+            "ok": False,
+            "skipped": True,
+            "reason": "functional smoke skipped because npx command is unavailable",
+            "command": None,
+            "exitCode": None,
+        }
+    functional_ok = bool(functional_smoke.get("ok")) or bool(functional_smoke.get("skipped"))
+
     if wrapper_smoke.get("ok"):
         selected_command = [str(wrapper_path), "--help"]
+        if not functional_ok:
+            return {
+                "ok": False,
+                "mode": "wrapper-functional-failed",
+                "wrapperPath": str(wrapper_path),
+                "wrapperExists": wrapper_exists,
+                "wrapperExecutable": wrapper_executable,
+                "wrapperSmoke": wrapper_smoke,
+                "npxSmoke": npx_smoke,
+                "functionalSmoke": functional_smoke,
+                "selectedCommand": render_shell_command(selected_command),
+                "selectedBinary": None,
+                "reason": "Playwright wrapper smoke check passed, but functional smoke failed",
+            }
         return {
             "ok": True,
             "mode": "wrapper",
@@ -727,12 +852,27 @@ def check_playwright_tool(npx_check: Dict[str, Any]) -> Dict[str, Any]:
             "wrapperExecutable": wrapper_executable,
             "wrapperSmoke": wrapper_smoke,
             "npxSmoke": npx_smoke,
+            "functionalSmoke": functional_smoke,
             "selectedCommand": render_shell_command(selected_command),
             "selectedBinary": None,
             "reason": None,
         }
 
     if npx_smoke.get("ok"):
+        if not functional_ok:
+            return {
+                "ok": False,
+                "mode": "npx-functional-failed",
+                "wrapperPath": str(wrapper_path),
+                "wrapperExists": wrapper_exists,
+                "wrapperExecutable": wrapper_executable,
+                "wrapperSmoke": wrapper_smoke,
+                "npxSmoke": npx_smoke,
+                "functionalSmoke": functional_smoke,
+                "selectedCommand": render_shell_command(npx_command) if npx_command else None,
+                "selectedBinary": npx_binary,
+                "reason": "npx smoke check passed, but functional smoke failed",
+            }
         wrapper_reason = wrapper_smoke.get("reason")
         if wrapper_exists and wrapper_executable:
             reason = "Playwright wrapper smoke check failed; fallback to npx succeeded"
@@ -751,6 +891,7 @@ def check_playwright_tool(npx_check: Dict[str, Any]) -> Dict[str, Any]:
             "wrapperExecutable": wrapper_executable,
             "wrapperSmoke": wrapper_smoke,
             "npxSmoke": npx_smoke,
+            "functionalSmoke": functional_smoke,
             "selectedCommand": render_shell_command(npx_command) if npx_command else None,
             "selectedBinary": npx_binary,
             "reason": reason,
@@ -772,6 +913,7 @@ def check_playwright_tool(npx_check: Dict[str, Any]) -> Dict[str, Any]:
         "wrapperExecutable": wrapper_executable,
         "wrapperSmoke": wrapper_smoke,
         "npxSmoke": npx_smoke,
+        "functionalSmoke": functional_smoke,
         "selectedCommand": None,
         "selectedBinary": None,
         "reason": "; ".join(reason_parts) if reason_parts else "Playwright wrapper and npx probes failed",
@@ -1098,21 +1240,29 @@ def bootstrap(
     debug_endpoint = f"http://{host}:{debug_port}/debug"
     query_endpoint = f"{core_base_url}/events/query"
 
+    agent_log_path: Optional[Path] = None
     health = check_health(core_base_url)
     if not health:
-        start_agent(plugin_root, core_port=core_port, debug_port=debug_port)
+        agent_log_path = start_agent(
+            plugin_root,
+            project_root=project_root,
+            core_port=core_port,
+            debug_port=debug_port,
+        )
         health = wait_for_health(core_base_url)
 
     if not health:
+        log_hint = f" Agent log: {agent_log_path}" if agent_log_path else ""
         raise RuntimeError(
-            f"Agent did not become healthy at {core_base_url}. Check npm dependencies and running processes."
+            f"Agent did not become healthy at {core_base_url}. Check npm dependencies and running processes.{log_hint}"
         )
 
     apply_runtime_config(core_base_url, active_config)
+    health_after_config = check_health(core_base_url) or health
 
     effective_app_url = str(active_config["appUrl"])
     recommended_actual_app_url: Optional[str] = None
-    active_session = health.get("activeSession")
+    active_session = health_after_config.get("activeSession")
     if isinstance(active_session, dict):
         session_tab_url = active_session.get("tabUrl")
         if isinstance(session_tab_url, str) and session_tab_url.strip():
@@ -1158,12 +1308,17 @@ def bootstrap(
     playwright_check = check_playwright_tool(npx_check)
     cdp_check = probe_cdp(cdp_port)
     headed_evidence_check = build_headed_evidence_check(cdp_check)
+    core_health_check = build_core_health_check(core_base_url, health_after_config)
+    command_probe_check = probe_command_endpoint(core_base_url)
+    session_summary = build_session_summary(health_after_config)
 
     checks: Dict[str, Any] = {
         "appUrl": app_url_check,
+        "coreHealth": core_health_check,
         "preflight": preflight_check,
         "debugPost": debug_post_check,
         "query": query_check,
+        "commandProbe": command_probe_check,
         "headedEvidence": headed_evidence_check,
         "tools": {
             "npx": npx_check,
@@ -1178,6 +1333,13 @@ def bootstrap(
             {
                 "id": "headed-evidence-required",
                 "message": str(headed_evidence_check["warning"]),
+            }
+        )
+    if not bool(command_probe_check.get("ok")):
+        warnings.append(
+            {
+                "id": "command-endpoint-unverified",
+                "message": "Core /command probe failed; command endpoint may be unstable.",
             }
         )
     if warnings:
@@ -1204,6 +1366,8 @@ def bootstrap(
         "debugEndpoint": debug_endpoint,
         "queryEndpoint": query_endpoint,
         "cdpPort": cdp_port,
+        "agentLogPath": str(agent_log_path) if agent_log_path else None,
+        "session": session_summary,
         "checks": checks,
         "browserInstrumentation": browser_instrumentation,
         "recommendations": recommendations,
@@ -1249,9 +1413,11 @@ def main() -> int:
             "debugEndpoint",
             "queryEndpoint",
             "cdpPort",
+            "agentLogPath",
             "appliedRecommendations",
         ]:
             print(f"- {key}: {result[key]}")
+        print(f"- session: {json.dumps(result['session'], ensure_ascii=True)}")
         print(f"- browserInstrumentation: {json.dumps(result['browserInstrumentation'], ensure_ascii=True)}")
         print(f"- recommendations: {json.dumps(result['recommendations'], ensure_ascii=True)}")
 

@@ -134,8 +134,26 @@ For WebGL/render symptoms, include at least one headed run. Treat fully black he
 When comparing visual parity:
 1. Keep both source images from the same scenario.
 2. Run `compare-reference`.
-3. Attach one artifact folder containing `runtime.json`, `metrics.json`, and `summary.json`.
+3. Attach one artifact folder containing `runtime.json`, `metrics.json`, `summary.json`, and `notes.md`.
 4. Include these artifact paths in the final report.
+
+## Interim Visual Report
+
+During iterative tuning loops, use:
+`references/interim-visual-report-template.md`
+
+Required blocks:
+1. `Hypothesis delta`
+2. `Evidence delta`
+3. `Next step`
+
+Keep final five-block report for closure only.
+
+## Parity Stop Rule
+
+Stop tuning and escalate to rollback + retrospective when either threshold is hit:
+1. 3 consecutive failed parity cycles for the same scenario.
+2. 90 minutes without meaningful metric improvement.
 
 ## Render Bug Guardrail
 

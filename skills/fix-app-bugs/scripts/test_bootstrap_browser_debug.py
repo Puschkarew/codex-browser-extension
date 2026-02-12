@@ -30,12 +30,15 @@ def write_executable(path: Path, content: str) -> None:
 def run_playwright_check(
     module: ModuleType,
     wrapper_path: Path,
-    npx_path: Path,
+    npx_path: Path | None = None,
+    *,
+    npx_ok: bool = True,
 ) -> dict:
     original_wrapper = os.environ.get("PLAYWRIGHT_WRAPPER_PATH")
     os.environ["PLAYWRIGHT_WRAPPER_PATH"] = str(wrapper_path)
     try:
-        return module.check_playwright_tool({"ok": True, "path": str(npx_path)})
+        npx_check = {"ok": npx_ok, "path": str(npx_path) if npx_path else None}
+        return module.check_playwright_tool(npx_check)
     finally:
         if original_wrapper is None:
             os.environ.pop("PLAYWRIGHT_WRAPPER_PATH", None)
@@ -131,9 +134,17 @@ def main() -> int:
             npx_ok,
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            "for arg in \"$@\"; do\n"
-            "  if [[ \"$arg\" == \"playwright-mcp\" ]]; then\n"
+            "for ((i=1; i<=$#; i++)); do\n"
+            "  arg=\"${!i}\"\n"
+            "  if [[ \"$arg\" == \"playwright-mcp\" || \"$arg\" == \"playwright-cli\" ]]; then\n"
             "    exit 0\n"
+            "  fi\n"
+            "  if [[ \"$arg\" == \"--package\" ]]; then\n"
+            "    j=$((i+1))\n"
+            "    pkg=\"${!j:-}\"\n"
+            "    if [[ \"$pkg\" == \"playwright\" ]]; then\n"
+            "      exit 0\n"
+            "    fi\n"
             "  fi\n"
             "done\n"
             "exit 7\n",
@@ -143,7 +154,17 @@ def main() -> int:
         assert result_wrapper_ok["ok"] is True, result_wrapper_ok
         assert result_wrapper_ok["mode"] == "wrapper", result_wrapper_ok
         assert result_wrapper_ok["wrapperSmoke"]["ok"] is True, result_wrapper_ok
+        assert result_wrapper_ok["functionalSmoke"]["ok"] is True, result_wrapper_ok
         assert "selectedCommand" in result_wrapper_ok, result_wrapper_ok
+
+        result_wrapper_ok_without_npx = run_playwright_check(module, wrapper_ok, None, npx_ok=False)
+        assert result_wrapper_ok_without_npx["ok"] is True, result_wrapper_ok_without_npx
+        assert result_wrapper_ok_without_npx["mode"] == "wrapper", result_wrapper_ok_without_npx
+        assert result_wrapper_ok_without_npx["wrapperSmoke"]["ok"] is True, result_wrapper_ok_without_npx
+        assert result_wrapper_ok_without_npx["npxSmoke"]["ok"] is False, result_wrapper_ok_without_npx
+        assert result_wrapper_ok_without_npx["functionalSmoke"]["ok"] is False, result_wrapper_ok_without_npx
+        assert result_wrapper_ok_without_npx["functionalSmoke"]["skipped"] is True, result_wrapper_ok_without_npx
+        assert isinstance(result_wrapper_ok_without_npx["functionalSmoke"]["reason"], str), result_wrapper_ok_without_npx
 
         wrapper_fail = root / "wrapper_fail.sh"
         write_executable(
@@ -158,6 +179,7 @@ def main() -> int:
         assert result_wrapper_fail_npx_ok["mode"] == "npx-fallback", result_wrapper_fail_npx_ok
         assert result_wrapper_fail_npx_ok["wrapperSmoke"]["ok"] is False, result_wrapper_fail_npx_ok
         assert result_wrapper_fail_npx_ok["npxSmoke"]["ok"] is True, result_wrapper_fail_npx_ok
+        assert result_wrapper_fail_npx_ok["functionalSmoke"]["ok"] is True, result_wrapper_fail_npx_ok
         assert result_wrapper_fail_npx_ok["selectedBinary"] == "playwright-mcp", result_wrapper_fail_npx_ok
 
         npx_fail = root / "npx_fail.sh"
@@ -173,6 +195,7 @@ def main() -> int:
         assert result_wrapper_fail_npx_fail["mode"] == "unavailable", result_wrapper_fail_npx_fail
         assert result_wrapper_fail_npx_fail["wrapperSmoke"]["ok"] is False, result_wrapper_fail_npx_fail
         assert result_wrapper_fail_npx_fail["npxSmoke"]["ok"] is False, result_wrapper_fail_npx_fail
+        assert result_wrapper_fail_npx_fail["functionalSmoke"]["ok"] is False, result_wrapper_fail_npx_fail
 
     print("bootstrap_browser_debug playwright diagnostics smoke checks passed")
     return 0

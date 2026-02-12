@@ -20,6 +20,7 @@ Every `fix-app-bugs` run must end with these five blocks.
 - If `bootstrap.status = fallback`, state it explicitly as a hard fact.
 - For WebGL/render tasks, include at least one headed browser-visible validation.
 - For parity checks, include paths to `runtime.json`, `metrics.json`, and `summary.json` from `compare-reference`.
+- Include `notes.md` path when parity bundle helper was used.
 
 ## 4) Instrumentation Status
 

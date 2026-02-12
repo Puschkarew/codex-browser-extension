@@ -18,6 +18,14 @@ Diagnose and fix bugs with a strict evidence-first workflow:
 Never claim browser instrumentation is active unless bootstrap output confirms:
 `browserInstrumentation.canInstrumentFromBrowser = true`.
 
+## Mode Decision Helper (30 seconds)
+
+1. Use lightweight Browser Debug flow when fast local iteration is enough.
+2. Use strict `fix-app-bugs` flow when reproducibility and machine-verifiable final evidence are required.
+3. If strict flow reports fallback, switch to `terminal-probe` immediately (no browser-fetch retry loops).
+4. For visual parity, keep one artifact bundle per checkpoint (`runtime.json`, `metrics.json`, `summary.json`, images, `notes.md`).
+5. If parity stalls for 3 cycles or 90 minutes, stop tuning and switch to rollback + retrospective planning.
+
 ## Start Questions
 
 Ask only what is needed to reproduce and validate:
@@ -33,6 +41,11 @@ Ask only what is needed to reproduce and validate:
 0. Bootstrap Browser Debug with guardrails.
 Set skill root once (works even when target project has no local `scripts/` folder):
 `FIX_APP_BUGS_ROOT="${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs"`
+
+Optional quick-start helper for visual tasks:
+`python3 "$FIX_APP_BUGS_ROOT/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json`
+This helper runs guarded bootstrap, validates app-url status, optionally runs minimal terminal-probe capture, and prints next actions.
+Exit code contract: non-zero when guarded bootstrap fails, or when terminal-probe capture is executed and fails.
 
 Run:
 `python3 "$FIX_APP_BUGS_ROOT/scripts/bootstrap_guarded.py" --project-root <project-root> --json`
@@ -56,9 +69,12 @@ Use output fields as source of truth:
 10. `checks.appUrl.checklist`, `checks.appUrl.recommendedCommands`, `checks.appUrl.canAutoFix`, `checks.appUrl.nextAction`
 11. `checks.appUrl.matchType` (`exact` or `loopback-equivalent`)
 12. `checks.tools.playwright.wrapperSmoke` and `checks.tools.playwright.npxSmoke`
-13. `checks.headedEvidence` and `checks.warnings` (headless false-negative guard)
-14. `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` (always print both in status updates)
-15. `checks.appUrl.recommendedActualAppUrl` when available
+13. `checks.tools.playwright.functionalSmoke` (functional navigate/screenshot smoke; optional when `npx` is unavailable and non-blocking for healthy wrapper mode)
+14. `checks.headedEvidence` and `checks.warnings` (headless false-negative guard)
+15. `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` (always print both in status updates)
+16. `checks.appUrl.recommendedActualAppUrl` when available
+17. `checks.coreHealth` and `checks.commandProbe` (core/API stability diagnostics)
+18. `session` (`active`, `sessionId`, `tabUrl`, `state`)
 
 If `checks.appUrl.status = not-provided` or `checks.appUrl.status = mismatch`, run the first `recommendedCommands` entry immediately and re-run bootstrap.
 Do not continue to instrumentation or patching until `checks.appUrl.status = match`.
@@ -94,8 +110,9 @@ For render bugs (diagonal split, half-screen black, invisible simulation), prefe
 4. For WebGL/render bugs, run at least one headed validation step. Headless black screenshots are non-final evidence.
 5. For parity checks, use `compare-reference` output artifacts (`runtime.json`, `metrics.json`, `summary.json`) when available.
 6. For scenario capture in fallback mode, run:
-`python3 "$FIX_APP_BUGS_ROOT/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$FIX_APP_BUGS_ROOT/references/terminal-probe-scenarios.example.json" --json`
+`python3 "$FIX_APP_BUGS_ROOT/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id auto --tab-url <url> --scenarios "$FIX_APP_BUGS_ROOT/references/terminal-probe-scenarios.example.json" --json`
 Use a project-specific scenario file (ON/OFF/paused) derived from the example.
+You can still pass explicit `--session-id <id>` when needed.
 
 3. Ask user to reproduce.
 Use the template in `references/repro-request-template.md` and request a timestamp window.
@@ -141,6 +158,28 @@ When bugfix quality depends on visual parity, add a dedicated parity block:
 2. Run `compare-reference` and keep one artifact folder.
 3. Include `runtime.json`, `metrics.json`, and `summary.json` paths in the final report.
 4. Treat parity as unresolved if metrics are missing or from a different scenario.
+5. Keep `notes.md` in the same artifact folder for handoff context.
+
+## Interim Visual Report (Iteration Loops)
+
+Use `references/interim-visual-report-template.md` during exploratory parity loops.
+
+Required blocks:
+1. `Hypothesis delta`
+2. `Evidence delta`
+3. `Next step`
+
+Keep the five-block final template for final closure only.
+
+## Visual Parity Stop Rule
+
+Stop iterative parity tuning when either threshold is met:
+1. 3 consecutive failed parity cycles for the same scenario.
+2. 90 minutes without meaningful metric improvement.
+
+When stop-rule triggers:
+1. Record the latest artifact bundle paths.
+2. Propose rollback + retrospective planning instead of further tuning loops.
 
 ## Render Bug Guardrail (WebGL/Fullscreen)
 
@@ -150,6 +189,7 @@ For fullscreen/render regressions, validate both geometry and UV space before an
 2. `vUv` spans `[0..1]` for fragment texture sampling.
 3. Canvas CSS size and drawing buffer size both match expected viewport.
 4. Clear/blend/alpha state does not zero out final composite.
+5. If `webgl-diagnostics.scene.nonBlackRatio` conflicts with screenshot non-black metrics, treat screenshot metrics + runtime exceptions as source of truth.
 
 If one axis is fixed without the other, expect regression.
 Do not report success until the exact user-visible symptom is re-checked.
@@ -198,3 +238,5 @@ See `references/debug-log-spec.md`.
 7. `references/debug-log-spec.md`: event schema and mode-specific instrumentation rules.
 8. `references/repro-request-template.md`: copy-ready reproduction prompts.
 9. `references/final-report-template.md`: required five-block final report format.
+10. `references/interim-visual-report-template.md`: lightweight iteration report for parity tuning loops.
+11. `scripts/visual_debug_start.py`: visual-debug bootstrap + starter helper.

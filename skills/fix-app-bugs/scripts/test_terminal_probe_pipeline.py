@@ -17,6 +17,23 @@ SCRIPT_PATH = Path(__file__).resolve().parent / "terminal_probe_pipeline.py"
 
 class FakeCoreHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/session/ensure":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {
+                        "sessionId": "auto-session-id",
+                        "ingestToken": "test-ingest-token",
+                        "state": "running",
+                        "attachedTargetUrl": "http://127.0.0.1:5173/",
+                        "reused": True,
+                    }
+                ).encode("utf-8")
+            )
+            return
+
         if self.path != "/command":
             self.send_response(404)
             self.end_headers()
@@ -48,7 +65,7 @@ class FakeCoreHandler(BaseHTTPRequestHandler):
                     "summaryJsonPath": "/tmp/summary.json",
                 },
             }
-        elif command in {"reload", "click", "type", "webgl-diagnostics"}:
+        elif command in {"reload", "wait", "navigate", "evaluate", "click", "type", "webgl-diagnostics"}:
             result = {"command": command}
         else:
             self.send_response(422)
@@ -87,13 +104,20 @@ def main() -> int:
                 [
                     {
                         "name": "scene-off",
-                        "commands": [{"do": "reload"}],
+                        "commands": [
+                            {"do": "reload"},
+                            {"do": "wait", "ms": 200},
+                            {"do": "evaluate", "expression": "window.location.href"},
+                        ],
                         "referenceImagePath": str(reference_path),
                         "fullPage": True,
                     },
                     {
                         "name": "scene-paused",
-                        "commands": [{"do": "webgl-diagnostics"}],
+                        "commands": [
+                            {"do": "navigate", "url": "http://127.0.0.1:5173/"},
+                            {"do": "webgl-diagnostics"},
+                        ],
                         "fullPage": True,
                     },
                 ]
@@ -118,7 +142,9 @@ def main() -> int:
                     "--core-base-url",
                     core_url,
                     "--session-id",
-                    "smoke-session",
+                    "auto",
+                    "--tab-url",
+                    "http://127.0.0.1:5173/",
                     "--scenarios",
                     str(scenarios_path),
                     "--output-dir",
@@ -138,6 +164,8 @@ def main() -> int:
         payload = json.loads(completed.stdout)
         assert payload["ok"] is True, payload
         assert payload["scenarioCount"] == 2, payload
+        assert payload["resolvedSession"]["auto"] is True, payload
+        assert payload["resolvedSession"]["resolvedSessionId"] == "auto-session-id", payload
 
         runtime_path = Path(payload["runtimeJsonPath"])
         metrics_path = Path(payload["metricsJsonPath"])

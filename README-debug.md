@@ -3,6 +3,13 @@
 This is the advanced operational runbook for `Enhanced mode (fix-app-bugs optional addon)`.
 For default standalone usage, start with [README.md](README.md) and follow `Core mode`.
 
+## Mode Decision Helper (30 seconds)
+1. Stay in `Core mode` for exploratory local debugging and fast manual loops.
+2. Use `Enhanced mode` when reproducibility and strict final evidence are required.
+3. If guarded bootstrap returns `canInstrumentFromBrowser = false` or `bootstrap.status = fallback`, run `terminal-probe` immediately.
+4. For visual parity, generate one artifact bundle per checkpoint and keep at least one headed validation.
+5. If parity stalls for 3 cycles or 90 minutes, stop tuning and move to rollback + retrospective planning.
+
 ## Components
 
 1. `extensions/humans-debugger` (MV3 extension)
@@ -125,6 +132,14 @@ Run again with actual app URL (required for browser-fetch mode):
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project-root <project-root> --actual-app-url <url> --json
 ```
 
+Optional visual starter helper:
+
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json
+```
+
+Exit code contract: returns non-zero when guarded bootstrap fails, or when terminal-probe capture is executed and fails.
+
 If Enhanced prerequisites are unavailable, continue in `Core mode` from [README.md](README.md).
 
 Branch from machine-readable verdict:
@@ -154,6 +169,7 @@ Playwright compatibility diagnostics are also machine-readable:
 2. `checks.tools.playwright.npxSmoke`
 3. `checks.tools.playwright.selectedCommand`
 4. `checks.tools.playwright.selectedBinary`
+5. `checks.tools.playwright.functionalSmoke` (can be `skipped=true` when `npx` is unavailable; this does not block a healthy wrapper probe)
 
 ## Query Logs by Reproduction Window
 
@@ -237,7 +253,11 @@ npm run agent:cmd -- --session <id> --do snapshot --fullPage
 ```bash
 npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
 ```
-9. WebGL diagnostics:
+9. Parity bundle helper:
+```bash
+npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline
+```
+10. WebGL diagnostics:
 ```bash
 npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
@@ -290,12 +310,32 @@ For parity-sensitive work, keep one artifact folder containing:
 4. `actual.png`
 5. `reference.png`
 6. `diff.png` (when enabled)
+7. `notes.md`
 
 Default artifact path:
 `logs/browser-debug/<sessionId>/artifacts/<runId>/...`
 
 Terminal-probe pipeline artifact path (default):
 `logs/browser-debug/<sessionId>/terminal-probe/<timestamp>/...`
+
+## Interim Visual Report (Iteration Loops)
+
+Use a lightweight report for iterative tuning loops:
+1. `Hypothesis delta`
+2. `Evidence delta`
+3. `Next step`
+
+Template path:
+`skills/fix-app-bugs/references/interim-visual-report-template.md`
+
+Keep the five-block report as final-closure-only in Enhanced mode.
+
+## Parity Stop Rule
+
+If the same scenario fails parity for 3 consecutive cycles or 90 minutes with no meaningful metrics improvement:
+1. Stop tuning.
+2. Record interim evidence bundle paths.
+3. Convert the effort into rollback + retrospective planning.
 
 ## Skill Sync Workflow
 

@@ -57,6 +57,12 @@ def fallback_payload(project_root: str, reason: str, script_path: Optional[Path]
         "debugEndpoint": None,
         "queryEndpoint": None,
         "cdpPort": None,
+        "session": {
+            "active": False,
+            "sessionId": None,
+            "tabUrl": None,
+            "state": None,
+        },
         "checks": {},
         "browserInstrumentation": {
             "canInstrumentFromBrowser": False,
@@ -90,6 +96,15 @@ def enrich_success_payload(payload: Dict[str, Any], script_path: Path) -> Dict[s
     browser["mode"] = mode
     browser["reason"] = reason
     result["browserInstrumentation"] = browser
+
+    session = result.get("session")
+    if not isinstance(session, dict):
+        session = {}
+    session["active"] = bool(session.get("active"))
+    session["sessionId"] = session.get("sessionId") if isinstance(session.get("sessionId"), str) else None
+    session["tabUrl"] = session.get("tabUrl") if isinstance(session.get("tabUrl"), str) else None
+    session["state"] = session.get("state") if isinstance(session.get("state"), str) else None
+    result["session"] = session
 
     result["bootstrap"] = {
         "status": "ok",

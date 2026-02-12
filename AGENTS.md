@@ -21,6 +21,14 @@ Before execution, declare one mode for the current run:
 
 If no mode is explicitly selected, default to `Core mode`.
 
+## Mode Decision Helper (30 seconds)
+1. Use `Core mode` for local iteration, exploratory debugging, and quick command loops.
+2. Use `Enhanced mode (fix-app-bugs optional addon)` when reproducibility and machine-verifiable evidence are required.
+3. If uncertain, start in `Core mode` and switch only when strict report/cleanup rules become necessary.
+4. Switch from `Core` to `Enhanced` when you need guarded bootstrap verdicts or audit-ready final reporting.
+5. In `Enhanced`, if `browserInstrumentation.canInstrumentFromBrowser = false` (or `bootstrap.status = fallback`), continue in `terminal-probe` instead of retry loops.
+6. For visual parity tasks, keep one artifact bundle (`runtime.json`, `metrics.json`, `summary.json`, images) per checkpoint.
+
 ## Baseline Workflow (All Modes)
 1. Install dependencies:
 ```bash
@@ -106,6 +114,10 @@ For WebGL/render bugs, do not treat black headless screenshots as sole proof.
 Declare success only with browser-visible confirmation or concrete runtime errors.
 At least one headed validation run is mandatory for final success claims.
 
+### Visual Parity Stop Rule (All modes)
+If the same scenario fails parity for 3 consecutive cycles or 90 minutes without meaningful metric improvement, stop tuning.
+Convert the run into rollback + retrospective planning before continuing.
+
 ## Approved Commands
 ### Commands valid in both modes
 - Start agent: `npm run agent:start`
@@ -121,6 +133,7 @@ npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save
 npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
 npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline
 npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
 - Run tests: `npm test`

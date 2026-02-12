@@ -10,7 +10,10 @@ interface:
     least two hypotheses in Hypothesis -> Evidence -> Verdict format. For render
     bugs, validate fullscreen geometry and UV mapping together plus viewport/canvas
     and clear/blend/alpha state, and require at least one headed validation step.
+    For visual tasks, you may start with scripts/visual_debug_start.py to run guarded
+    bootstrap and print next commands. Stop parity tuning after 3 failed cycles or
+    90 minutes without meaningful metric improvement, then move to rollback/retro plan.
     For parity-sensitive tasks, include compare-reference artifact paths for
-    runtime.json, metrics.json, and summary.json. Apply the smallest patch, validate
+    runtime.json, metrics.json, summary.json, and notes.md. Apply the smallest patch, validate
     the same user-visible symptom, run guarded cleanup, and finish with Root Cause,
     Patch, Validation, Instrumentation Status, and Residual Risk.
