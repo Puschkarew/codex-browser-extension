@@ -120,6 +120,16 @@ Ensure `CODEX_HOME` is set:
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 ```
 
+If this run was auto-invoked by a workflow/reviewer skill, use the shared routing contract as control-plane input:
+- `$CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md`
+- `$CODEX_HOME/skills/workflows-shared/references/auto-routing-capability-map.md`
+
+Auto-routing control rules:
+1. `EVERY_AUTO_ROUTING_ENABLED=false` means no auto invocation is allowed.
+2. Session opt-out tokens (`no-auto-routing`, `manual-only`, `skip-browser-debug`) force manual path.
+3. Keep `Core mode` default unless strict reproducibility is explicitly required.
+4. If capability gate falls back, continue in `terminal-probe` and avoid page-side `fetch(debugEndpoint)` calls.
+
 Always run guarded bootstrap first:
 
 ```bash

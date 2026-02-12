@@ -11,8 +11,11 @@ Use this repository to collect reproducible browser runtime evidence, run contro
 - `config`: default allowlist and network capture rules.
 - `logs/browser-debug`: JSONL logs and snapshot artifacts.
 - `skills/fix-app-bugs`: repository mirror of local `fix-app-bugs` skill.
+- `docs/contracts`: mirrored auto-routing contract and capability map used by workflow/reviewer skills.
 - `scripts/sync-fix-app-bugs-skill.sh`: local<->repo skill sync helper.
 - `scripts/check-fix-app-bugs-sync.sh`: mandatory mirror sync check.
+- `scripts/sync-auto-routing-contract.sh`: local<->repo contract sync helper.
+- `scripts/check-auto-routing-contract-sync.sh`: mandatory contract mirror sync check.
 
 ## Mode Declaration
 Before execution, declare one mode for the current run:
@@ -28,6 +31,22 @@ If no mode is explicitly selected, default to `Core mode`.
 4. Switch from `Core` to `Enhanced` when you need guarded bootstrap verdicts or audit-ready final reporting.
 5. In `Enhanced`, if `browserInstrumentation.canInstrumentFromBrowser = false` (or `bootstrap.status = fallback`), continue in `terminal-probe` instead of retry loops.
 6. For visual parity tasks, keep one artifact bundle (`runtime.json`, `metrics.json`, `summary.json`, images) per checkpoint.
+
+## Workflow Auto-Routing Contract
+
+Workflow/reviewer skills that support auto invocation of Browser Debug + `fix-app-bugs` must follow:
+- Local source-of-truth: `$CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md`
+- Local capability map: `$CODEX_HOME/skills/workflows-shared/references/auto-routing-capability-map.md`
+- Repo mirrors:
+  - `docs/contracts/auto-routing-contract.md`
+  - `docs/contracts/auto-routing-capability-map.md`
+
+Required rules:
+1. Honor global kill-switch: `EVERY_AUTO_ROUTING_ENABLED=false` => force `no-route`.
+2. Honor per-session opt-out tokens: `no-auto-routing`, `manual-only`, `skip-browser-debug`.
+3. Keep `Core mode` as default; use `Enhanced` only for strict reproducibility needs.
+4. If capability gate falls back, continue in `terminal-probe` and do not add browser-side `fetch(debugEndpoint)`.
+5. Emit routing outcomes as `success`, `partial`, or `blocked`.
 
 ## Baseline Workflow (All Modes)
 1. Install dependencies:
@@ -138,6 +157,7 @@ npm run agent:cmd -- --session <id> --do webgl-diagnostics
 ```
 - Run tests: `npm test`
 - Skill sync check before commit/push: `npm run skill:sync:check`
+- Routing contract sync check before commit/push: `npm run routing:sync:check`
 
 ### Enhanced-only helper commands
 - Guarded bootstrap:
@@ -159,3 +179,4 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --p
 - Do not claim `fix-app-bugs` is mandatory for plugin operation.
 - When changing workflows, update `README.md`, `README-debug.md`, and `AGENTS.md` together.
 - Skill workflow: edit local skill first, then run `npm run skill:sync:from-local`, then `npm run skill:sync:check`, then commit/push.
+- Auto-routing contract workflow: edit local contract docs first, then run `npm run routing:sync:from-local`, then `npm run routing:sync:check`.

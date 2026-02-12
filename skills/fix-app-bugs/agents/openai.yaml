@@ -2,7 +2,9 @@ interface:
   display_name: "Fix App Bugs"
   short_description: "Diagnose and fix app behavior with strict runtime evidence"
   default_prompt: >
-    Use $fix-app-bugs with strict evidence mode. Start with guarded bootstrap and
+    Use $fix-app-bugs with strict evidence mode. This skill may be invoked directly
+    or through auto-routing policy from $CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md.
+    Start with guarded bootstrap and
     re-run it with --actual-app-url before declaring instrumentation mode. Always
     print checks.appUrl.configAppUrl and checks.appUrl.actualAppUrl together. If
     bootstrap is unavailable or fails, switch to terminal-probe mode explicitly and

@@ -108,6 +108,23 @@ Each target project can provide `.codex/browser-debug.json`:
 - Choose `Core mode` for local/manual debugging and fast iteration.
 - Choose `Enhanced mode (fix-app-bugs optional addon)` when you need strict reproducibility, explicit instrumentation gates, and machine-verifiable bugfix reporting.
 
+## Workflow Auto Routing (Every Skills)
+
+Workflow and reviewer skills can auto-route into Browser Debug + `fix-app-bugs` based on a shared contract.
+
+Source-of-truth and mirrors:
+- Local: `$CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md`
+- Local capability map: `$CODEX_HOME/skills/workflows-shared/references/auto-routing-capability-map.md`
+- Repo mirrors:
+  - `docs/contracts/auto-routing-contract.md`
+  - `docs/contracts/auto-routing-capability-map.md`
+
+Routing guardrails:
+1. `EVERY_AUTO_ROUTING_ENABLED=false` disables all auto-routing.
+2. Session opt-out tokens (`no-auto-routing`, `manual-only`, `skip-browser-debug`) force `no-route`.
+3. `Core mode` remains default; `Enhanced` is used only for strict reproducibility.
+4. Fallback verdicts force `terminal-probe`, with no browser-side `fetch(debugEndpoint)` usage.
+
 ### Quick Decision Tree
 1. Start with `Core mode` for exploratory debugging and fast command loops.
 2. Move to `Enhanced mode` when you need guarded bootstrap verdicts and strict final reports.
@@ -191,6 +208,20 @@ npm run skill:sync:check
 3. Optional repo -> local sync:
 ```bash
 npm run skill:sync:to-local
+```
+
+Auto-routing contract mirror workflow:
+1. Sync local -> repo mirror:
+```bash
+npm run routing:sync:from-local
+```
+2. Verify sync before commit/push:
+```bash
+npm run routing:sync:check
+```
+3. Optional repo -> local sync:
+```bash
+npm run routing:sync:to-local
 ```
 
 Quick check:

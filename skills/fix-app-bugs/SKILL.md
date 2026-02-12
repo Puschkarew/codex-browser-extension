@@ -18,6 +18,16 @@ Diagnose and fix bugs with a strict evidence-first workflow:
 Never claim browser instrumentation is active unless bootstrap output confirms:
 `browserInstrumentation.canInstrumentFromBrowser = true`.
 
+## Auto-Routing Compatibility
+
+This skill can be invoked manually or by Every auto-routing rules.
+
+When invoked by auto-routing:
+1. Read shared contract from `$CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md`.
+2. Respect kill-switch and session opt-out decisions made by the caller.
+3. Return explicit route outcome status (`success`, `partial`, `blocked`) in status updates.
+4. Keep fallback behavior unchanged: if capability gate fails, use `terminal-probe` and never use browser-side `fetch(debugEndpoint)`.
+
 ## Mode Decision Helper (30 seconds)
 
 1. Use lightweight Browser Debug flow when fast local iteration is enough.
