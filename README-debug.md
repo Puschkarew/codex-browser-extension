@@ -80,6 +80,7 @@ npm run agent:start
 3. `readiness.cdp`: deep probe result for `http://127.0.0.1:<cdpPort>/json/version`.
 4. `readiness.cdpReason`: probe error when unavailable.
 5. `readiness.cdpPort`: active runtime CDP port.
+6. `appUrlDrift`: config-vs-active-tab drift hint with a `recommendedCommand` template (`--project-root <project-root>`) when mismatch is detected.
 
 ## Enhanced Mode Compatibility (fix-app-bugs)
 
@@ -120,6 +121,16 @@ Ensure `CODEX_HOME` is set:
 export CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 ```
 
+If this run was auto-invoked by a workflow/reviewer skill, use the shared routing contract as control-plane input:
+- `$CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md`
+- `$CODEX_HOME/skills/workflows-shared/references/auto-routing-capability-map.md`
+
+Auto-routing control rules:
+1. `EVERY_AUTO_ROUTING_ENABLED=false` means no auto invocation is allowed.
+2. Session opt-out tokens (`no-auto-routing`, `manual-only`, `skip-browser-debug`) force manual path.
+3. Keep `Core mode` default unless strict reproducibility is explicitly required.
+4. If capability gate falls back, continue in `terminal-probe` and avoid page-side `fetch(debugEndpoint)` calls.
+
 Always run guarded bootstrap first:
 
 ```bash
@@ -149,11 +160,12 @@ Branch from machine-readable verdict:
 
 Use `checks.appUrl` diagnostics as a mini-checklist:
 1. `checks.appUrl.checklist` for pass/fail steps.
-2. `checks.appUrl.recommendedCommands` for re-run and optional auto-fix commands.
+2. `checks.appUrl.recommendedCommands` (object entries) and `checks.appUrl.recommendedCommandsText` (command strings) for re-run and optional auto-fix commands.
 3. `checks.appUrl.canAutoFix` + `checks.appUrl.autoFixMode` to confirm that auto-fix is explicit-flag only.
 4. `checks.appUrl.matchType` (`exact` / `loopback-equivalent`) and `checks.appUrl.nextAction` for deterministic next step selection.
-5. Always print `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together in run status.
-6. If `checks.appUrl.status` is `not-provided` or `mismatch`, run the first recommended command before continuing.
+5. `checks.appUrl.primaryRecommendedCommand` is the copy-ready remediation command.
+6. Always print `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together in run status.
+7. If `checks.appUrl.status` is `not-provided` or `mismatch`, run the first recommended command before continuing.
 
 Fallback cause diagnostics are explicit:
 1. `browserInstrumentation.failureCategory`

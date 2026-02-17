@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -50,6 +51,49 @@ def run_json_command(command: List[str]) -> Dict[str, Any]:
     }
 
 
+def shell_join(args: List[str]) -> str:
+    return " ".join(shlex.quote(item) for item in args)
+
+
+def unique_strings(items: List[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for item in items:
+        value = item.strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def extract_recommended_commands(app_url_check: Dict[str, Any]) -> List[str]:
+    commands: List[str] = []
+
+    raw = app_url_check.get("recommendedCommands")
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, str):
+                commands.append(item)
+                continue
+            if isinstance(item, dict):
+                command_value = as_string(item.get("command"))
+                if command_value:
+                    commands.append(command_value)
+
+    raw_text = app_url_check.get("recommendedCommandsText")
+    if isinstance(raw_text, list):
+        for item in raw_text:
+            if isinstance(item, str):
+                commands.append(item)
+
+    primary = as_string(app_url_check.get("primaryRecommendedCommand"))
+    if primary:
+        commands.append(primary)
+
+    return unique_strings(commands)
+
+
 def make_minimal_scenarios_file(actual_app_url: str) -> Path:
     fd, temp_path = tempfile.mkstemp(prefix="fix-app-bugs-starter-", suffix=".json")
     os.close(fd)
@@ -81,14 +125,13 @@ def collect_next_actions(payload: Dict[str, Any]) -> List[str]:
 
     checks = payload.get("checks")
     app_url_status = None
-    recommended_commands: List[str] = []
+    app_url_check: Dict[str, Any] = {}
     if isinstance(checks, dict):
         app = checks.get("appUrl")
         if isinstance(app, dict):
+            app_url_check = app
             app_url_status = as_string(app.get("status"))
-            recommended_raw = app.get("recommendedCommands")
-            if isinstance(recommended_raw, list):
-                recommended_commands = [item for item in recommended_raw if isinstance(item, str) and item.strip()]
+    recommended_commands = extract_recommended_commands(app_url_check)
 
     if app_url_status in {"mismatch", "not-provided"}:
         if recommended_commands:
@@ -158,6 +201,7 @@ def main() -> int:
     parser.add_argument("--scenarios", default=None, help="Optional scenario file for terminal-probe pipeline")
     parser.add_argument("--output-dir", default=None, help="Optional output directory for terminal-probe bundle")
     parser.add_argument("--skip-terminal-probe", action="store_true", help="Skip terminal-probe capture step")
+    parser.add_argument("--plan-mode", action="store_true", help="Preview config alignment commands without running terminal-probe")
     parser.add_argument("--bootstrap-script", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--terminal-probe-script", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true", help="Print machine-readable output")
@@ -194,14 +238,70 @@ def main() -> int:
 
     checks = bootstrap_payload.get("checks") if isinstance(bootstrap_payload, dict) else {}
     app_url_status = None
+    app_url_reason_code = None
     config_app_url = None
     actual_app_url = args.actual_app_url
+    app_url_check: Dict[str, Any] = {}
     if isinstance(checks, dict):
         app = checks.get("appUrl")
         if isinstance(app, dict):
+            app_url_check = app
             app_url_status = as_string(app.get("status"))
+            app_url_reason_code = as_string(app.get("reasonCode"))
             config_app_url = as_string(app.get("configAppUrl"))
             actual_app_url = as_string(app.get("actualAppUrl")) or args.actual_app_url
+
+    recommended_commands = extract_recommended_commands(app_url_check)
+    resume_command = shell_join(
+        [
+            "python3",
+            str(Path(__file__).resolve()),
+            "--project-root",
+            str(Path(args.project_root).expanduser().resolve()),
+            "--actual-app-url",
+            actual_app_url,
+            "--json",
+        ]
+    )
+    preview_command = shell_join(
+        [
+            "python3",
+            str(bootstrap_script),
+            "--project-root",
+            str(Path(args.project_root).expanduser().resolve()),
+            "--actual-app-url",
+            actual_app_url,
+            "--json",
+        ]
+    )
+    default_apply_command = shell_join(
+        [
+            "python3",
+            str(bootstrap_script),
+            "--project-root",
+            str(Path(args.project_root).expanduser().resolve()),
+            "--actual-app-url",
+            actual_app_url,
+            "--apply-recommended",
+            "--json",
+        ]
+    )
+    apply_command = recommended_commands[0] if recommended_commands else default_apply_command
+    config_alignment: Optional[Dict[str, Any]] = None
+    if app_url_status in {"mismatch", "not-provided", "invalid-actual-url"}:
+        config_alignment = {
+            "required": True,
+            "status": app_url_status,
+            "reasonCode": app_url_reason_code,
+            "previewCommand": preview_command,
+            "applyCommand": apply_command,
+            "resumeCommand": resume_command,
+        }
+        if args.plan_mode:
+            next_actions.append("Plan mode enabled: preview config alignment commands before applying changes.")
+        next_actions.append(f"Preview config fix: {preview_command}")
+        next_actions.append(f"Apply config fix: {apply_command}")
+        next_actions.append(f"Resume visual starter: {resume_command}")
 
     terminal_probe_result: Optional[Dict[str, Any]] = None
     scenarios_path: Optional[Path] = None
@@ -210,6 +310,7 @@ def main() -> int:
     can_run_terminal_probe = (
         mode == "terminal-probe"
         and not args.skip_terminal_probe
+        and not args.plan_mode
         and app_url_status not in {"mismatch", "not-provided", "invalid-actual-url"}
     )
 
@@ -239,8 +340,12 @@ def main() -> int:
 
     if mode == "browser-fetch":
         next_actions.append("Run parity bundle: npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline")
+    elif mode == "terminal-probe" and args.plan_mode:
+        next_actions.append("Plan mode: terminal-probe capture skipped. Run without --plan-mode to capture runtime artifacts.")
     elif mode == "terminal-probe" and args.skip_terminal_probe:
         next_actions.append("Run terminal-probe scenarios manually when ready.")
+
+    next_actions = unique_strings(next_actions)
 
     exit_code = compute_exit_code(bootstrap=bootstrap, terminal_probe_result=terminal_probe_result)
 
@@ -252,8 +357,10 @@ def main() -> int:
         "checks": {
             "configAppUrl": config_app_url,
             "actualAppUrl": actual_app_url,
+            "reasonCode": app_url_reason_code,
         },
         "bootstrap": bootstrap,
+        "configAlignment": config_alignment,
         "terminalProbe": terminal_probe_result,
         "nextActions": next_actions,
     }
@@ -264,6 +371,7 @@ def main() -> int:
         print("Visual debug starter")
         print(f"- mode: {mode}")
         print(f"- checks.appUrl.status: {app_url_status}")
+        print(f"- checks.appUrl.reasonCode: {app_url_reason_code}")
         print(f"- checks.appUrl.configAppUrl: {config_app_url}")
         print(f"- checks.appUrl.actualAppUrl: {actual_app_url}")
         if terminal_probe_result is not None:

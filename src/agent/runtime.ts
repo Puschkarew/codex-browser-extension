@@ -47,6 +47,16 @@ type HealthResponse = {
   debugPort: number;
   activeProjectId: string;
   appUrl: string;
+  appUrlDrift: {
+    status: "match" | "mismatch" | "no-active-session" | "invalid-url";
+    matchType: "exact" | "loopback-equivalent" | "mismatch" | "not-evaluated";
+    configAppUrl: string;
+    activeSessionTabUrl: string | null;
+    configOrigin: string | null;
+    activeOrigin: string | null;
+    reason: string | null;
+    recommendedCommand: string | null;
+  };
   activeSession: false | { sessionId: string; state: string; tabUrl: string; startedAt: string };
   readiness: {
     debug: boolean;
@@ -92,6 +102,148 @@ function parseHostname(rawUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+type UrlParts = {
+  scheme: string;
+  hostname: string;
+  port: number;
+  origin: string;
+};
+
+function parseUrlParts(rawUrl: string): UrlParts | null {
+  try {
+    const parsed = new URL(rawUrl);
+    const scheme = parsed.protocol.replace(":", "").toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
+    const port =
+      parsed.port.length > 0 ? Number(parsed.port) : scheme === "https" ? 443 : 80;
+    if (!hostname || !Number.isInteger(port)) {
+      return null;
+    }
+    return {
+      scheme,
+      hostname,
+      port,
+      origin: parsed.origin,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function normalizeHostForMatch(hostname: string): string {
+  return hostname === "localhost" || hostname === "127.0.0.1" ? "loopback" : hostname;
+}
+
+function buildBootstrapRemediationCommand(activeSessionTabUrl: string): string {
+  return (
+    "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/bootstrap_guarded.py\"" +
+    " --project-root <project-root>" +
+    ` --actual-app-url ${shellQuote(activeSessionTabUrl)}` +
+    " --apply-recommended --json"
+  );
+}
+
+export function buildAppUrlDrift(
+  configAppUrl: string,
+  activeSessionTabUrl: string | null,
+): HealthResponse["appUrlDrift"] {
+  const configParts = parseUrlParts(configAppUrl);
+  const activeParts = activeSessionTabUrl ? parseUrlParts(activeSessionTabUrl) : null;
+
+  if (!configParts) {
+    return {
+      status: "invalid-url",
+      matchType: "not-evaluated",
+      configAppUrl,
+      activeSessionTabUrl,
+      configOrigin: null,
+      activeOrigin: activeParts?.origin ?? null,
+      reason: "runtime config appUrl is invalid",
+      recommendedCommand: null,
+    };
+  }
+
+  if (!activeSessionTabUrl) {
+    return {
+      status: "no-active-session",
+      matchType: "not-evaluated",
+      configAppUrl,
+      activeSessionTabUrl: null,
+      configOrigin: configParts.origin,
+      activeOrigin: null,
+      reason: "no active session tab URL; drift cannot be evaluated yet",
+      recommendedCommand: null,
+    };
+  }
+
+  if (!activeParts) {
+    return {
+      status: "invalid-url",
+      matchType: "not-evaluated",
+      configAppUrl,
+      activeSessionTabUrl,
+      configOrigin: configParts.origin,
+      activeOrigin: null,
+      reason: "active session tab URL is invalid",
+      recommendedCommand: null,
+    };
+  }
+
+  const exactMatch =
+    configParts.scheme === activeParts.scheme &&
+    configParts.hostname === activeParts.hostname &&
+    configParts.port === activeParts.port;
+
+  const loopbackEquivalent =
+    configParts.scheme === activeParts.scheme &&
+    configParts.port === activeParts.port &&
+    normalizeHostForMatch(configParts.hostname) === "loopback" &&
+    normalizeHostForMatch(activeParts.hostname) === "loopback";
+
+  if (exactMatch) {
+    return {
+      status: "match",
+      matchType: "exact",
+      configAppUrl,
+      activeSessionTabUrl,
+      configOrigin: configParts.origin,
+      activeOrigin: activeParts.origin,
+      reason: null,
+      recommendedCommand: null,
+    };
+  }
+
+  if (loopbackEquivalent) {
+    const recommendedCommand = buildBootstrapRemediationCommand(activeSessionTabUrl);
+    return {
+      status: "match",
+      matchType: "loopback-equivalent",
+      configAppUrl,
+      activeSessionTabUrl,
+      configOrigin: configParts.origin,
+      activeOrigin: activeParts.origin,
+      reason: "loopback-equivalent origins detected; optional config sync recommended",
+      recommendedCommand,
+    };
+  }
+
+  const recommendedCommand = buildBootstrapRemediationCommand(activeSessionTabUrl);
+  return {
+    status: "mismatch",
+    matchType: "mismatch",
+    configAppUrl,
+    activeSessionTabUrl,
+    configOrigin: configParts.origin,
+    activeOrigin: activeParts.origin,
+    reason: `config origin ${configParts.origin} differs from active tab origin ${activeParts.origin}`,
+    recommendedCommand,
+  };
 }
 
 function getBoundPort(server: FastifyInstance, fallbackPort: number): number {
@@ -397,6 +549,7 @@ export class AgentRuntime {
       const runtimeConfig = this.runtimeConfigState.get();
       const cdpPort = runtimeConfig.browser.cdpPort;
       const cdpReadiness = await this.probeCdpReadiness(cdpPort);
+      const appUrlDrift = buildAppUrlDrift(runtimeConfig.appUrl, active?.tabUrl ?? null);
 
       return {
         status: "ok",
@@ -406,6 +559,7 @@ export class AgentRuntime {
         debugPort: getBoundPort(this.debugServer, this.debugPort),
         activeProjectId: runtimeConfig.projectId,
         appUrl: runtimeConfig.appUrl,
+        appUrlDrift,
         activeSession: active
           ? {
               sessionId: active.sessionId,

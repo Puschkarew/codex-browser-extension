@@ -73,7 +73,8 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project
 
 Bootstrap notes:
 - Loopback origins `localhost` and `127.0.0.1` are treated as equivalent for capability checks.
-- `checks.appUrl.recommendedCommands` now prioritizes `--apply-recommended` on mismatch to avoid rerun loops.
+- `checks.appUrl.recommendedCommands` (object entries) and `checks.appUrl.recommendedCommandsText` (string entries) prioritize `--apply-recommended` on mismatch to avoid rerun loops.
+- `checks.appUrl.primaryRecommendedCommand` provides a copy-ready command string for fast remediation.
 - Inspect `browserInstrumentation.failureCategory` to distinguish `network-mismatch-only` vs `endpoint-unavailable`.
 
 If guarded bootstrap falls back or Enhanced prerequisites are unavailable, continue in Core mode.
@@ -108,6 +109,23 @@ Each target project can provide `.codex/browser-debug.json`:
 - Choose `Core mode` for local/manual debugging and fast iteration.
 - Choose `Enhanced mode (fix-app-bugs optional addon)` when you need strict reproducibility, explicit instrumentation gates, and machine-verifiable bugfix reporting.
 
+## Workflow Auto Routing (Every Skills)
+
+Workflow and reviewer skills can auto-route into Browser Debug + `fix-app-bugs` based on a shared contract.
+
+Source-of-truth and mirrors:
+- Local: `$CODEX_HOME/skills/workflows-shared/references/auto-routing-contract.md`
+- Local capability map: `$CODEX_HOME/skills/workflows-shared/references/auto-routing-capability-map.md`
+- Repo mirrors:
+  - `docs/contracts/auto-routing-contract.md`
+  - `docs/contracts/auto-routing-capability-map.md`
+
+Routing guardrails:
+1. `EVERY_AUTO_ROUTING_ENABLED=false` disables all auto-routing.
+2. Session opt-out tokens (`no-auto-routing`, `manual-only`, `skip-browser-debug`) force `no-route`.
+3. `Core mode` remains default; `Enhanced` is used only for strict reproducibility.
+4. Fallback verdicts force `terminal-probe`, with no browser-side `fetch(debugEndpoint)` usage.
+
 ### Quick Decision Tree
 1. Start with `Core mode` for exploratory debugging and fast command loops.
 2. Move to `Enhanced mode` when you need guarded bootstrap verdicts and strict final reports.
@@ -122,6 +140,7 @@ These commands are valid in both modes:
 - Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot|compare-reference|webgl-diagnostics>`
 - Capture one parity bundle: `npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline`
 - Query logs: `npm run agent:query -- --from <ISO> --to <ISO> [--tag <tag>]`
+- Aggregate 24h agent feedback: `npm run agent:feedback -- --window 24h [--targets browser-debug,fix-app-bugs]`
 - Run tests: `npm test`
 
 Examples:
@@ -148,7 +167,7 @@ Default base URLs:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/health` | `GET` | Agent status, active session, readiness (including CDP probe). |
+| `/health` | `GET` | Agent status, active session, readiness (including CDP probe), and `appUrlDrift` hint vs active tab URL. |
 | `/runtime/config` | `GET`, `POST` | Read or update active runtime config. |
 | `/session/start` | `POST` | Start session and attach to tab via CDP. |
 | `/session/stop` | `POST` | Stop current session and detach CDP. |
@@ -172,6 +191,7 @@ Mode note: API surface stays the same in both modes; Enhanced mode imposes stric
 - `SESSION_ALREADY_RUNNING`: stop the active session first (`npm run agent:stop` or `/session/stop`).
 - `browserInstrumentation.failureCategory = network-mismatch-only`: apply first `checks.appUrl.recommendedCommands` entry with `--apply-recommended`.
 - `browserInstrumentation.failureCategory = endpoint-unavailable`: verify agent health and endpoint reachability before retrying browser-fetch.
+- `/health.appUrlDrift.status = mismatch`: use `/health.appUrlDrift.recommendedCommand` as a template and replace `<project-root>` with your target app repository path.
 - Missing `fix-app-bugs` tooling is not a blocker for Core mode; run Core workflow directly.
 
 ## Skill Sync Workflow
@@ -191,6 +211,20 @@ npm run skill:sync:check
 3. Optional repo -> local sync:
 ```bash
 npm run skill:sync:to-local
+```
+
+Auto-routing contract mirror workflow:
+1. Sync local -> repo mirror:
+```bash
+npm run routing:sync:from-local
+```
+2. Verify sync before commit/push:
+```bash
+npm run routing:sync:check
+```
+3. Optional repo -> local sync:
+```bash
+npm run routing:sync:to-local
 ```
 
 Quick check:
