@@ -65,6 +65,10 @@ def main() -> int:
     assert app_url_check["autoFixMode"] == "explicit-flag", app_url_check
     assert app_url_check["nextAction"] == "apply-recommended", app_url_check
     assert app_url_check["recommendedCommands"][0]["id"] == "apply-recommended-app-url-fix", app_url_check
+    assert isinstance(app_url_check["recommendedCommandsText"], list), app_url_check
+    assert isinstance(app_url_check["primaryRecommendedCommand"], str), app_url_check
+    assert app_url_check["primaryRecommendedCommandId"] == "apply-recommended-app-url-fix", app_url_check
+    assert app_url_check["reasonCode"] == "APP_URL_ORIGIN_MISMATCH", app_url_check
 
     strict_gate_check = module.enrich_app_url_check(
         module.evaluate_app_url_check("http://localhost:3000", None),
@@ -80,6 +84,7 @@ def main() -> int:
     assert strict_gate_check["recommendedActualAppUrl"] == "http://127.0.0.1:5173", strict_gate_check
     assert strict_gate_check["checklist"][0]["pass"] is False, strict_gate_check
     assert strict_gate_check["nextAction"] == "provide-actual-app-url", strict_gate_check
+    assert strict_gate_check["reasonCode"] == "ACTUAL_APP_URL_NOT_PROVIDED", strict_gate_check
 
     loopback_equivalent_check = module.enrich_app_url_check(
         module.evaluate_app_url_check("http://localhost:5173", "http://127.0.0.1:5173"),
@@ -94,6 +99,7 @@ def main() -> int:
     assert loopback_equivalent_check["needsConfigSync"] is True, loopback_equivalent_check
     assert loopback_equivalent_check["recommendedCommands"][0]["id"] == "optional-sync-app-url", loopback_equivalent_check
     assert loopback_equivalent_check["nextAction"] == "optional-sync", loopback_equivalent_check
+    assert loopback_equivalent_check["reasonCode"] == "APP_URL_LOOPBACK_DRIFT", loopback_equivalent_check
 
     mismatch_category = module.classify_instrumentation_failure(
         {

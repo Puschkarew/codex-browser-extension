@@ -99,6 +99,17 @@ def main() -> int:
         assert payload["terminalProbe"]["exitCode"] == 0, payload
         assert any("summary" in item for item in payload.get("nextActions", [])), payload
 
+        completed_plan_mode, payload_plan_mode = run_case(
+            project_root,
+            bootstrap_terminal_probe,
+            terminal_probe_ok,
+            extra_args=["--plan-mode"],
+        )
+        assert completed_plan_mode.returncode == 0, completed_plan_mode
+        assert payload_plan_mode["mode"] == "terminal-probe", payload_plan_mode
+        assert payload_plan_mode["terminalProbe"] is None, payload_plan_mode
+        assert any("Plan mode" in item for item in payload_plan_mode.get("nextActions", [])), payload_plan_mode
+
         bootstrap_mismatch = root / "bootstrap_mismatch.py"
         write_executable(
             bootstrap_mismatch,
@@ -115,7 +126,14 @@ def main() -> int:
             "      'status': 'mismatch',\n"
             "      'configAppUrl': 'http://localhost:5173/',\n"
             "      'actualAppUrl': 'http://127.0.0.1:5173/',\n"
-            "      'recommendedCommands': ['python3 bootstrap_guarded.py --actual-app-url http://127.0.0.1:5173/ --apply-recommended --json']\n"
+            "      'reasonCode': 'APP_URL_ORIGIN_MISMATCH',\n"
+            "      'recommendedCommands': [\n"
+            "        {\n"
+            "          'id': 'apply-recommended-app-url-fix',\n"
+            "          'command': 'python3 bootstrap_guarded.py --actual-app-url http://127.0.0.1:5173/ --apply-recommended --json',\n"
+            "          'description': 'Apply recommended appUrl fix'\n"
+            "        }\n"
+            "      ]\n"
             "    }\n"
             "  }\n"
             "}))\n",
@@ -127,6 +145,10 @@ def main() -> int:
         assert payload_mismatch["mode"] == "browser-fetch", payload_mismatch
         assert payload_mismatch["appUrlStatus"] == "mismatch", payload_mismatch
         assert payload_mismatch["terminalProbe"] is None, payload_mismatch
+        assert isinstance(payload_mismatch.get("configAlignment"), dict), payload_mismatch
+        assert payload_mismatch["configAlignment"]["required"] is True, payload_mismatch
+        assert "apply-recommended" in payload_mismatch["configAlignment"]["applyCommand"], payload_mismatch
+        assert payload_mismatch["checks"]["reasonCode"] == "APP_URL_ORIGIN_MISMATCH", payload_mismatch
         assert any("Run recommended command:" in item for item in payload_mismatch.get("nextActions", [])), payload_mismatch
 
         bootstrap_fails = root / "bootstrap_fails.py"

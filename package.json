@@ -13,6 +13,7 @@
     "agent:cmd": "tsx src/cli/cmd.ts",
     "agent:parity-bundle": "tsx src/cli/parity-bundle.ts",
     "agent:query": "tsx src/cli/query.ts",
+    "agent:feedback": "tsx src/cli/feedback.ts",
     "skill:sync:from-local": "bash scripts/sync-fix-app-bugs-skill.sh --from-local",
     "skill:sync:to-local": "bash scripts/sync-fix-app-bugs-skill.sh --to-local",
     "skill:sync:check": "bash scripts/check-fix-app-bugs-sync.sh",

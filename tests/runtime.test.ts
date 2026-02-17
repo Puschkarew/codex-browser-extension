@@ -127,6 +127,12 @@ describe("AgentRuntime APIs", () => {
       debugPort: number;
       activeProjectId: string;
       appUrl: string;
+      appUrlDrift: {
+        status: string;
+        matchType: string;
+        configAppUrl: string;
+        activeSessionTabUrl: string | null;
+      };
       readiness: {
         debug: boolean;
         query: boolean;
@@ -141,6 +147,10 @@ describe("AgentRuntime APIs", () => {
     expect(health.corePort).toBeGreaterThan(0);
     expect(health.debugPort).toBeGreaterThan(0);
     expect(health.activeProjectId).toBe("default-project");
+    expect(health.appUrlDrift.status).toBe("no-active-session");
+    expect(health.appUrlDrift.matchType).toBe("not-evaluated");
+    expect(health.appUrlDrift.configAppUrl).toBe(health.appUrl);
+    expect(health.appUrlDrift.activeSessionTabUrl).toBeNull();
     expect(health.readiness.debug).toBe(true);
     expect(health.readiness.query).toBe(true);
     expect(typeof health.readiness.cdp).toBe("boolean");

@@ -145,6 +145,10 @@ Convert the run into rollback + retrospective planning before continuing.
 ```bash
 npm run agent:query -- --from <ISO> --to <ISO> --tag <tag>
 ```
+- Aggregate recent agent feedback:
+```bash
+npm run agent:feedback -- --window 24h --targets browser-debug,fix-app-bugs
+```
 - Execute browser command:
 ```bash
 npm run agent:cmd -- --session <id> --do reload

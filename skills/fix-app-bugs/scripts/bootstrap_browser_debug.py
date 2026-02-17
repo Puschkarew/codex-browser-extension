@@ -425,6 +425,7 @@ def enrich_app_url_check(
         command_actual_url = recommended_actual_app_url.strip()
 
     recommended_commands: List[Dict[str, Any]] = []
+    recommended_commands_text: List[str] = []
     recommended_command_set = set()
 
     def push_command(command_id: str, apply_fix: bool, description: str) -> None:
@@ -442,6 +443,7 @@ def enrich_app_url_check(
                 "description": description,
             }
         )
+        recommended_commands_text.append(command)
         recommended_command_set.add(command)
 
     if status in {"not-provided", "invalid-actual-url"}:
@@ -501,8 +503,26 @@ def enrich_app_url_check(
     check["recommendedActualAppUrl"] = recommended_actual_app_url
     check["checklist"] = checklist
     check["recommendedCommands"] = recommended_commands
+    check["recommendedCommandsText"] = recommended_commands_text
+    check["primaryRecommendedCommand"] = recommended_commands_text[0] if recommended_commands_text else None
+    check["primaryRecommendedCommandId"] = (
+        recommended_commands[0]["id"] if recommended_commands else None
+    )
+    check["nextActionDescription"] = (
+        recommended_commands[0]["description"] if recommended_commands else None
+    )
     check["canAutoFix"] = can_auto_fix
     check["autoFixMode"] = "explicit-flag"
+    if status == "not-provided":
+        check["reasonCode"] = "ACTUAL_APP_URL_NOT_PROVIDED"
+    elif status == "invalid-actual-url":
+        check["reasonCode"] = "ACTUAL_APP_URL_INVALID"
+    elif status == "mismatch":
+        check["reasonCode"] = "APP_URL_ORIGIN_MISMATCH"
+    elif status == "match" and needs_config_sync:
+        check["reasonCode"] = "APP_URL_LOOPBACK_DRIFT"
+    else:
+        check["reasonCode"] = "NONE"
     if status in {"not-provided", "invalid-actual-url"}:
         check["nextAction"] = "provide-actual-app-url"
     elif status == "mismatch" and can_auto_fix and not applied_recommendations:
@@ -1357,6 +1377,16 @@ def bootstrap(
         "reason": instrumentation_failure["reason"],
     }
 
+    app_url_remediation = {
+        "status": app_url_check.get("status"),
+        "reasonCode": app_url_check.get("reasonCode"),
+        "nextAction": app_url_check.get("nextAction"),
+        "nextActionDescription": app_url_check.get("nextActionDescription"),
+        "primaryCommand": app_url_check.get("primaryRecommendedCommand"),
+        "canAutoFix": app_url_check.get("canAutoFix"),
+        "autoFixMode": app_url_check.get("autoFixMode"),
+    }
+
     return {
         "pluginRoot": str(plugin_root),
         "projectConfigPath": str(project_config_path),
@@ -1370,6 +1400,9 @@ def bootstrap(
         "session": session_summary,
         "checks": checks,
         "browserInstrumentation": browser_instrumentation,
+        "remediation": {
+            "appUrl": app_url_remediation,
+        },
         "recommendations": recommendations,
         "recommendedDiff": recommended_diff,
         "appliedRecommendations": applied_recommendations,

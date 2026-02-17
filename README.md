@@ -73,7 +73,8 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project
 
 Bootstrap notes:
 - Loopback origins `localhost` and `127.0.0.1` are treated as equivalent for capability checks.
-- `checks.appUrl.recommendedCommands` now prioritizes `--apply-recommended` on mismatch to avoid rerun loops.
+- `checks.appUrl.recommendedCommands` (object entries) and `checks.appUrl.recommendedCommandsText` (string entries) prioritize `--apply-recommended` on mismatch to avoid rerun loops.
+- `checks.appUrl.primaryRecommendedCommand` provides a copy-ready command string for fast remediation.
 - Inspect `browserInstrumentation.failureCategory` to distinguish `network-mismatch-only` vs `endpoint-unavailable`.
 
 If guarded bootstrap falls back or Enhanced prerequisites are unavailable, continue in Core mode.
@@ -139,6 +140,7 @@ These commands are valid in both modes:
 - Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot|compare-reference|webgl-diagnostics>`
 - Capture one parity bundle: `npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline`
 - Query logs: `npm run agent:query -- --from <ISO> --to <ISO> [--tag <tag>]`
+- Aggregate 24h agent feedback: `npm run agent:feedback -- --window 24h [--targets browser-debug,fix-app-bugs]`
 - Run tests: `npm test`
 
 Examples:
@@ -165,7 +167,7 @@ Default base URLs:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/health` | `GET` | Agent status, active session, readiness (including CDP probe). |
+| `/health` | `GET` | Agent status, active session, readiness (including CDP probe), and `appUrlDrift` hint vs active tab URL. |
 | `/runtime/config` | `GET`, `POST` | Read or update active runtime config. |
 | `/session/start` | `POST` | Start session and attach to tab via CDP. |
 | `/session/stop` | `POST` | Stop current session and detach CDP. |
@@ -189,6 +191,7 @@ Mode note: API surface stays the same in both modes; Enhanced mode imposes stric
 - `SESSION_ALREADY_RUNNING`: stop the active session first (`npm run agent:stop` or `/session/stop`).
 - `browserInstrumentation.failureCategory = network-mismatch-only`: apply first `checks.appUrl.recommendedCommands` entry with `--apply-recommended`.
 - `browserInstrumentation.failureCategory = endpoint-unavailable`: verify agent health and endpoint reachability before retrying browser-fetch.
+- `/health.appUrlDrift.status = mismatch`: use `/health.appUrlDrift.recommendedCommand` as a template and replace `<project-root>` with your target app repository path.
 - Missing `fix-app-bugs` tooling is not a blocker for Core mode; run Core workflow directly.
 
 ## Skill Sync Workflow

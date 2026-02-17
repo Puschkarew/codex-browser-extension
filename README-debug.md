@@ -80,6 +80,7 @@ npm run agent:start
 3. `readiness.cdp`: deep probe result for `http://127.0.0.1:<cdpPort>/json/version`.
 4. `readiness.cdpReason`: probe error when unavailable.
 5. `readiness.cdpPort`: active runtime CDP port.
+6. `appUrlDrift`: config-vs-active-tab drift hint with a `recommendedCommand` template (`--project-root <project-root>`) when mismatch is detected.
 
 ## Enhanced Mode Compatibility (fix-app-bugs)
 
@@ -159,11 +160,12 @@ Branch from machine-readable verdict:
 
 Use `checks.appUrl` diagnostics as a mini-checklist:
 1. `checks.appUrl.checklist` for pass/fail steps.
-2. `checks.appUrl.recommendedCommands` for re-run and optional auto-fix commands.
+2. `checks.appUrl.recommendedCommands` (object entries) and `checks.appUrl.recommendedCommandsText` (command strings) for re-run and optional auto-fix commands.
 3. `checks.appUrl.canAutoFix` + `checks.appUrl.autoFixMode` to confirm that auto-fix is explicit-flag only.
 4. `checks.appUrl.matchType` (`exact` / `loopback-equivalent`) and `checks.appUrl.nextAction` for deterministic next step selection.
-5. Always print `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together in run status.
-6. If `checks.appUrl.status` is `not-provided` or `mismatch`, run the first recommended command before continuing.
+5. `checks.appUrl.primaryRecommendedCommand` is the copy-ready remediation command.
+6. Always print `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together in run status.
+7. If `checks.appUrl.status` is `not-provided` or `mismatch`, run the first recommended command before continuing.
 
 Fallback cause diagnostics are explicit:
 1. `browserInstrumentation.failureCategory`
