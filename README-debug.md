@@ -148,8 +148,16 @@ Optional visual starter helper:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json
 ```
+For drag/parity-oriented baseline capture without custom scenarios:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --scenario-profile drag-parity --json
+```
+For bounded recovery + headed parity evidence in one run:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --auto-recover-session --headed-evidence --reference-image /path/ref.png --evidence-label baseline --json
+```
 
-Exit code contract: returns non-zero when guarded bootstrap fails, or when terminal-probe capture is executed and fails.
+Exit code contract: returns non-zero when guarded bootstrap fails, strict readiness gate remains false (`readyForScenarioRun=false` outside plan mode), headed-evidence fails, or terminal-probe capture is executed and fails.
 
 If Enhanced prerequisites are unavailable, continue in `Core mode` from [README.md](README.md).
 
@@ -157,6 +165,8 @@ Branch from machine-readable verdict:
 1. Browser instrumentation is allowed only when `browserInstrumentation.canInstrumentFromBrowser = true`.
 2. If `false` or `bootstrap.status = fallback`, mode is `terminal-probe`.
 3. In `terminal-probe`, do not add page-side `fetch(debugEndpoint)` instrumentation.
+4. Require `readyForScenarioRun = true` before scenario execution; if `false`, treat launch as blocked and use `readinessReasons` for remediation.
+5. In `browser-fetch`, `checks.headedEvidence.ok=false` contributes `headed-evidence:*` readiness reasons and blocks strict launch.
 
 Use `checks.appUrl` diagnostics as a mini-checklist:
 1. `checks.appUrl.checklist` for pass/fail steps.
@@ -224,6 +234,12 @@ When running terminal-probe scenario capture/metrics:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id auto --tab-url <url> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
+Optional reliability flags:
+- `--force-new-session` to stop an active session before `session/ensure`.
+- `--open-tab-if-missing` to call CDP `json/new` on `TARGET_NOT_FOUND` and retry `session/ensure`.
+- `visual_debug_start.py --auto-recover-session` to run one bounded `/health -> /session/stop -> /session/ensure` recovery attempt before re-running bootstrap.
+- `visual_debug_start.py --headed-evidence` to produce headed evidence bundle (`--reference-image` required in `browser-fetch`; terminal-probe reuses existing bundle paths).
+
 Customize the scenario file with real ON/OFF/paused selectors for your app.
 
 Or resolve/reuse session directly from CLI:

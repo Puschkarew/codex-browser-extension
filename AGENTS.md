@@ -89,14 +89,16 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/bootstrap_guarded.py" --project
 ```
 4. Browser instrumentation is allowed only when `browserInstrumentation.canInstrumentFromBrowser = true`.
 5. If `false` or `bootstrap.status = fallback`, switch to `terminal-probe` mode.
-6. In `terminal-probe` mode, do not add page-side `fetch(debugEndpoint)` calls.
-7. If `checks.appUrl.status = not-provided` or `checks.appUrl.status = mismatch`, use `checks.appUrl.checklist` and `checks.appUrl.recommendedCommands`, then re-run bootstrap before continuing.
-8. `checks.appUrl.autoFixMode` must stay explicit-flag only (`--apply-recommended`).
-9. If `checks.appUrl.matchType = loopback-equivalent`, capability gate can pass, but optional config sync is still recommended for deterministic reruns.
-10. Read Playwright diagnostics from `checks.tools.playwright.wrapperSmoke` and `checks.tools.playwright.npxSmoke`.
-11. Use `browserInstrumentation.failureCategory` and `browserInstrumentation.failedChecks` to distinguish mismatch-only vs endpoint-unavailable fallback causes.
-12. Always report `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together.
-13. Respect `checks.headedEvidence` / `checks.warnings` and include at least one headed validation step for render bugs.
+6. Scenario execution is allowed only when `readyForScenarioRun = true`; if `false`, treat launch as blocked and use `readinessReasons` to pick remediation before running scenarios.
+7. In `terminal-probe` mode, do not add page-side `fetch(debugEndpoint)` calls.
+8. If `checks.appUrl.status = not-provided` or `checks.appUrl.status = mismatch`, use `checks.appUrl.checklist` and `checks.appUrl.recommendedCommands`, then re-run bootstrap before continuing.
+9. `checks.appUrl.autoFixMode` must stay explicit-flag only (`--apply-recommended`).
+10. If `checks.appUrl.matchType = loopback-equivalent`, capability gate can pass, but optional config sync is still recommended for deterministic reruns.
+11. Read Playwright diagnostics from `checks.tools.playwright.wrapperSmoke` and `checks.tools.playwright.npxSmoke`.
+12. Use `browserInstrumentation.failureCategory` and `browserInstrumentation.failedChecks` to distinguish mismatch-only vs endpoint-unavailable fallback causes.
+13. Always report `checks.appUrl.configAppUrl` and `checks.appUrl.actualAppUrl` together.
+14. Respect `checks.headedEvidence` / `checks.warnings` and include at least one headed validation step for render bugs.
+15. In `browser-fetch`, if `checks.headedEvidence.ok = false`, readiness is not satisfied (`headed-evidence:*`) until headed validation is performed.
 
 ### Cleanup and Evidence Rules (Enhanced mode only)
 Run guarded cleanup after bugfix work:
@@ -176,6 +178,12 @@ bash "$CODEX_HOME/skills/fix-app-bugs/scripts/cleanup_guarded.sh" .
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
+  - Optional reliability flags for `--session-id auto`: `--force-new-session`, `--open-tab-if-missing`.
+- Visual starter helper:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json
+```
+  - Optional strict-readiness helper flags: `--auto-recover-session`, `--headed-evidence`, `--reference-image <path>`, `--evidence-label <label>`.
 
 ## Notes for Contributors
 - Keep commands aligned with `package.json` scripts and current API contracts.

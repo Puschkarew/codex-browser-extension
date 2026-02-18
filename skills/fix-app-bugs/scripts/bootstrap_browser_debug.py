@@ -1225,6 +1225,63 @@ def classify_instrumentation_failure(checks: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def compute_scenario_readiness(
+    checks: Dict[str, Any],
+    browser_instrumentation: Dict[str, Any],
+    session_summary: Dict[str, Any],
+) -> Dict[str, Any]:
+    reasons: List[str] = []
+
+    can_instrument = bool(browser_instrumentation.get("canInstrumentFromBrowser"))
+    mode_raw = browser_instrumentation.get("mode")
+    mode = mode_raw.strip().lower() if isinstance(mode_raw, str) else None
+    if not can_instrument and mode in {None, "browser-fetch"}:
+        failure_category = browser_instrumentation.get("failureCategory")
+        if isinstance(failure_category, str) and failure_category:
+            reasons.append(f"instrumentation-gate:{failure_category}")
+        else:
+            reasons.append("instrumentation-gate:failed")
+
+    app_url_check = checks.get("appUrl")
+    if isinstance(app_url_check, dict):
+        app_status_raw = app_url_check.get("status")
+        app_status = app_status_raw.strip().lower() if isinstance(app_status_raw, str) else None
+        if app_status in {"not-provided", "mismatch", "invalid-actual-url"}:
+            reasons.append(f"app-url-gate:{app_status}")
+
+    headed_evidence_check = checks.get("headedEvidence")
+    if mode == "browser-fetch" and isinstance(headed_evidence_check, dict) and not bool(headed_evidence_check.get("ok")):
+        headless_likely = headed_evidence_check.get("headlessLikely")
+        if headless_likely is True:
+            reasons.append("headed-evidence:headless")
+        else:
+            reasons.append("headed-evidence:unverified")
+
+    tools = checks.get("tools")
+    cdp_check = tools.get("cdp") if isinstance(tools, dict) else None
+    if isinstance(cdp_check, dict) and not bool(cdp_check.get("ok")):
+        cdp_reason = cdp_check.get("reason")
+        if isinstance(cdp_reason, str) and cdp_reason.strip():
+            reasons.append(f"cdp-unavailable:{cdp_reason.strip()}")
+        else:
+            reasons.append("cdp-unavailable")
+
+    core_health = checks.get("coreHealth")
+    if isinstance(core_health, dict) and not bool(core_health.get("ok")):
+        reasons.append("core-health-unavailable")
+
+    if isinstance(session_summary, dict) and bool(session_summary.get("active")):
+        session_state = session_summary.get("state")
+        normalized_state = session_state.strip().lower() if isinstance(session_state, str) else "unknown"
+        if normalized_state != "running":
+            reasons.append(f"session-state:{normalized_state}")
+
+    return {
+        "readyForScenarioRun": len(reasons) == 0,
+        "readinessReasons": reasons,
+    }
+
+
 def bootstrap(
     project_root: Path,
     plugin_root_arg: Optional[str],
@@ -1376,6 +1433,8 @@ def bootstrap(
         "failedChecks": failed_checks,
         "reason": instrumentation_failure["reason"],
     }
+    readiness = compute_scenario_readiness(checks, browser_instrumentation, session_summary)
+    browser_instrumentation["readyForScenarioRun"] = readiness["readyForScenarioRun"]
 
     app_url_remediation = {
         "status": app_url_check.get("status"),
@@ -1400,6 +1459,8 @@ def bootstrap(
         "session": session_summary,
         "checks": checks,
         "browserInstrumentation": browser_instrumentation,
+        "readyForScenarioRun": readiness["readyForScenarioRun"],
+        "readinessReasons": readiness["readinessReasons"],
         "remediation": {
             "appUrl": app_url_remediation,
         },
@@ -1448,8 +1509,10 @@ def main() -> int:
             "cdpPort",
             "agentLogPath",
             "appliedRecommendations",
+            "readyForScenarioRun",
         ]:
             print(f"- {key}: {result[key]}")
+        print(f"- readinessReasons: {json.dumps(result['readinessReasons'], ensure_ascii=True)}")
         print(f"- session: {json.dumps(result['session'], ensure_ascii=True)}")
         print(f"- browserInstrumentation: {json.dumps(result['browserInstrumentation'], ensure_ascii=True)}")
         print(f"- recommendations: {json.dumps(result['recommendations'], ensure_ascii=True)}")

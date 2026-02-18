@@ -13,16 +13,36 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 DEFAULT_CORE_BASE_URL = "http://127.0.0.1:4678"
+BODY_SNIPPET_LIMIT = 600
+SESSION_ENSURE_RETRY_LIMIT = 3
+
+
+class SessionEnsureError(RuntimeError):
+    def __init__(
+        self,
+        status: Optional[int],
+        error_code: Optional[str],
+        error_message: str,
+        response_body_snippet: Optional[str],
+    ) -> None:
+        super().__init__(error_message)
+        self.status = status
+        self.error_code = error_code
+        self.error_message = error_message
+        self.response_body_snippet = response_body_snippet
 
 
 def iso_now() -> str:
@@ -34,6 +54,60 @@ def safe_float(raw_value: str) -> Optional[float]:
         return float(raw_value.strip())
     except ValueError:
         return None
+
+
+def sanitize_body_snippet(raw_value: Any, limit: int = BODY_SNIPPET_LIMIT) -> Optional[str]:
+    if raw_value is None:
+        return None
+
+    if isinstance(raw_value, (dict, list)):
+        text = json.dumps(raw_value, ensure_ascii=True)
+    else:
+        text = str(raw_value)
+
+    text = text.replace("\n", " ").replace("\r", " ")
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return None
+
+    text = re.sub(
+        r'(?i)("?(?:token|secret|password|authorization|cookie)"?\s*:\s*")[^"]*(")',
+        r"\1<redacted>\2",
+        text,
+    )
+    text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9\-._~+/]+=*", r"\1<redacted>", text)
+
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def extract_error_fields(response_body: Any) -> Dict[str, Any]:
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    error_details: Any = None
+
+    if isinstance(response_body, dict):
+        error_object = response_body.get("error")
+        if isinstance(error_object, dict):
+            raw_code = error_object.get("code")
+            raw_message = error_object.get("message")
+            if isinstance(raw_code, str) and raw_code:
+                error_code = raw_code
+            if isinstance(raw_message, str) and raw_message:
+                error_message = raw_message
+            if "details" in error_object:
+                error_details = error_object.get("details")
+        if error_message is None:
+            top_level_message = response_body.get("message")
+            if isinstance(top_level_message, str) and top_level_message:
+                error_message = top_level_message
+
+    return {
+        "errorCode": error_code,
+        "errorMessage": error_message,
+        "errorDetails": error_details,
+    }
 
 
 def http_json(
@@ -216,11 +290,23 @@ def run_core_command(
     )
 
     response_body = response.get("json")
+    snippet = sanitize_body_snippet(response_body if response_body is not None else response.get("body"))
+    error_fields = extract_error_fields(response_body)
     if not response.get("ok"):
+        error_message = (
+            error_fields.get("errorMessage")
+            or response.get("error")
+            or snippet
+            or "request failed"
+        )
         return {
             "ok": False,
             "status": response.get("status"),
-            "error": response.get("error") or response.get("body") or "request failed",
+            "error": error_message,
+            "errorCode": error_fields.get("errorCode"),
+            "errorMessage": error_fields.get("errorMessage"),
+            "errorDetails": error_fields.get("errorDetails"),
+            "responseBodySnippet": snippet,
             "response": response_body,
         }
 
@@ -229,14 +315,23 @@ def run_core_command(
             "ok": False,
             "status": response.get("status"),
             "error": "Core API returned non-JSON command payload",
+            "errorCode": None,
+            "errorMessage": None,
+            "errorDetails": None,
+            "responseBodySnippet": snippet,
             "response": response_body,
         }
 
     if not bool(response_body.get("ok")):
+        error_message = error_fields.get("errorMessage") or "Core API command failed"
         return {
             "ok": False,
             "status": response.get("status"),
-            "error": "Core API command failed",
+            "error": error_message,
+            "errorCode": error_fields.get("errorCode"),
+            "errorMessage": error_fields.get("errorMessage"),
+            "errorDetails": error_fields.get("errorDetails"),
+            "responseBodySnippet": snippet,
             "response": response_body,
         }
 
@@ -271,17 +366,19 @@ def ensure_session(
     )
     body = response.get("json")
     if not response.get("ok"):
-        error_code = None
-        error_message = None
-        if isinstance(body, dict):
-            error = body.get("error")
-            if isinstance(error, dict):
-                error_code = error.get("code")
-                error_message = error.get("message")
-        raise RuntimeError(
-            "session ensure failed: "
-            f"status={response.get('status')} "
-            f"code={error_code} message={error_message or response.get('error') or response.get('body')}"
+        error_fields = extract_error_fields(body)
+        snippet = sanitize_body_snippet(body if body is not None else response.get("body"))
+        message = (
+            error_fields.get("errorMessage")
+            or response.get("error")
+            or snippet
+            or "request failed"
+        )
+        raise SessionEnsureError(
+            status=response.get("status"),
+            error_code=error_fields.get("errorCode"),
+            error_message=message,
+            response_body_snippet=snippet,
         )
 
     if not isinstance(body, dict):
@@ -297,6 +394,246 @@ def ensure_session(
         "attachedTargetUrl": body.get("attachedTargetUrl"),
         "reused": bool(body.get("reused")),
     }
+
+
+def get_active_session_id(core_base_url: str, timeout_seconds: float) -> Optional[str]:
+    response = http_json(
+        "GET",
+        f"{core_base_url}/health",
+        timeout=timeout_seconds,
+    )
+    body = response.get("json")
+    if not response.get("ok") or not isinstance(body, dict):
+        return None
+    active = body.get("activeSession")
+    if not isinstance(active, dict):
+        return None
+    session_id = active.get("sessionId")
+    if isinstance(session_id, str) and session_id:
+        return session_id
+    return None
+
+
+def stop_session(core_base_url: str, session_id: str, timeout_seconds: float) -> Dict[str, Any]:
+    response = http_json(
+        "POST",
+        f"{core_base_url}/session/stop",
+        payload={"sessionId": session_id},
+        timeout=timeout_seconds,
+    )
+    body = response.get("json")
+    snippet = sanitize_body_snippet(body if body is not None else response.get("body"))
+    error_fields = extract_error_fields(body)
+    if response.get("ok"):
+        return {
+            "ok": True,
+            "status": response.get("status"),
+            "responseBodySnippet": snippet,
+        }
+
+    return {
+        "ok": False,
+        "status": response.get("status"),
+        "errorCode": error_fields.get("errorCode"),
+        "errorMessage": error_fields.get("errorMessage") or response.get("error") or snippet,
+        "responseBodySnippet": snippet,
+    }
+
+
+def open_tab_via_cdp(tab_url: str, debug_port: int, timeout_seconds: float) -> Dict[str, Any]:
+    encoded_url = quote(tab_url, safe="")
+    endpoint = f"http://127.0.0.1:{debug_port}/json/new?{encoded_url}"
+    methods = ["PUT", "GET"]
+    last_failure: Optional[Dict[str, Any]] = None
+
+    for method in methods:
+        request = Request(endpoint, method=method)
+        try:
+            with urlopen(request, timeout=timeout_seconds) as response:
+                raw_body = response.read().decode("utf-8", errors="replace")
+                parsed_body: Any
+                try:
+                    parsed_body = json.loads(raw_body)
+                except ValueError:
+                    parsed_body = None
+
+                target_id = parsed_body.get("id") if isinstance(parsed_body, dict) else None
+                target_url = parsed_body.get("url") if isinstance(parsed_body, dict) else None
+                return {
+                    "ok": True,
+                    "status": response.status,
+                    "method": method,
+                    "endpoint": endpoint,
+                    "targetId": target_id,
+                    "targetUrl": target_url,
+                    "responseBodySnippet": sanitize_body_snippet(raw_body),
+                }
+        except HTTPError as exc:
+            raw_body = exc.read().decode("utf-8", errors="replace")
+            last_failure = {
+                "ok": False,
+                "status": exc.code,
+                "method": method,
+                "endpoint": endpoint,
+                "errorMessage": str(exc),
+                "responseBodySnippet": sanitize_body_snippet(raw_body),
+            }
+            if exc.code not in {404, 405}:
+                break
+        except (URLError, TimeoutError, ValueError) as exc:
+            last_failure = {
+                "ok": False,
+                "status": None,
+                "method": method,
+                "endpoint": endpoint,
+                "errorMessage": str(exc),
+                "responseBodySnippet": None,
+            }
+            break
+
+    return last_failure or {
+        "ok": False,
+        "status": None,
+        "method": None,
+        "endpoint": endpoint,
+        "errorMessage": "Unable to open tab via CDP",
+        "responseBodySnippet": None,
+    }
+
+
+def classify_session_failure(error: SessionEnsureError) -> str:
+    if error.error_code == "TARGET_NOT_FOUND":
+        return "target-not-found"
+    if error.error_code == "CDP_UNAVAILABLE" or error.status == 503:
+        return "cdp-unavailable"
+    if error.error_code == "SESSION_ALREADY_RUNNING" or error.status == 409:
+        return "session-already-running"
+    if error.status == 422:
+        return "validation-error"
+    return "session-ensure-failed"
+
+
+def resolve_auto_session(
+    core_base_url: str,
+    tab_url: str,
+    debug_port: int,
+    reuse_active: bool,
+    force_new_session: bool,
+    open_tab_if_missing: bool,
+    timeout_seconds: float,
+) -> Dict[str, Any]:
+    lifecycle: Dict[str, Any] = {
+        "forceNewSession": force_new_session,
+        "openTabIfMissing": open_tab_if_missing,
+        "failureCategory": None,
+        "actions": [],
+    }
+
+    if force_new_session:
+        active_session_id = get_active_session_id(core_base_url, timeout_seconds)
+        if active_session_id:
+            stop_result = stop_session(core_base_url, active_session_id, timeout_seconds)
+            lifecycle["actions"].append(
+                {
+                    "action": "stop-active-session",
+                    "sessionId": active_session_id,
+                    **stop_result,
+                }
+            )
+            if not bool(stop_result.get("ok")):
+                lifecycle["failureCategory"] = "session-stop-failed"
+                raise RuntimeError(
+                    "force-new-session failed: "
+                    f"status={stop_result.get('status')} "
+                    f"code={stop_result.get('errorCode')} "
+                    f"message={stop_result.get('errorMessage')}"
+                )
+        else:
+            lifecycle["actions"].append(
+                {
+                    "action": "stop-active-session",
+                    "ok": True,
+                    "status": None,
+                    "skipped": True,
+                    "reason": "no-active-session",
+                }
+            )
+        reuse_active = False
+
+    opened_tab_for_target_recovery = False
+    for attempt in range(1, SESSION_ENSURE_RETRY_LIMIT + 1):
+        try:
+            ensured = ensure_session(
+                core_base_url=core_base_url,
+                tab_url=tab_url,
+                debug_port=debug_port,
+                reuse_active=reuse_active,
+                timeout_seconds=timeout_seconds,
+            )
+            lifecycle["actions"].append(
+                {
+                    "action": "ensure-session",
+                    "attempt": attempt,
+                    "ok": True,
+                    "status": 200,
+                    "reused": ensured.get("reused"),
+                    "sessionId": ensured.get("sessionId"),
+                    "attachedTargetUrl": ensured.get("attachedTargetUrl"),
+                }
+            )
+            return {
+                "ensured": ensured,
+                "lifecycle": lifecycle,
+            }
+        except SessionEnsureError as exc:
+            failure_category = classify_session_failure(exc)
+            lifecycle["failureCategory"] = failure_category
+            lifecycle["actions"].append(
+                {
+                    "action": "ensure-session",
+                    "attempt": attempt,
+                    "ok": False,
+                    "status": exc.status,
+                    "errorCode": exc.error_code,
+                    "errorMessage": exc.error_message,
+                    "responseBodySnippet": exc.response_body_snippet,
+                    "failureCategory": failure_category,
+                }
+            )
+
+            if (
+                open_tab_if_missing
+                and not opened_tab_for_target_recovery
+                and failure_category == "target-not-found"
+            ):
+                open_tab_result = open_tab_via_cdp(tab_url, debug_port, timeout_seconds)
+                lifecycle["actions"].append(
+                    {
+                        "action": "open-tab-if-missing",
+                        **open_tab_result,
+                    }
+                )
+                if bool(open_tab_result.get("ok")):
+                    opened_tab_for_target_recovery = True
+                    continue
+                raise RuntimeError(
+                    "open-tab-if-missing failed: "
+                    f"status={open_tab_result.get('status')} "
+                    f"message={open_tab_result.get('errorMessage')}"
+                )
+
+            if failure_category == "cdp-unavailable" and attempt < SESSION_ENSURE_RETRY_LIMIT:
+                time.sleep(0.4 * attempt)
+                continue
+
+            raise RuntimeError(
+                "session ensure failed: "
+                f"status={exc.status} "
+                f"code={exc.error_code} "
+                f"message={exc.error_message}"
+            ) from exc
+
+    raise RuntimeError("session ensure failed: retry limit exceeded")
 
 
 def find_magick_binary() -> Optional[str]:
@@ -496,6 +833,7 @@ def run_pipeline(
     scenarios: List[Dict[str, Any]],
     output_dir: Path,
     timeout_ms: int,
+    session_lifecycle: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     timeout_seconds = max(timeout_ms / 1000.0, 1.0)
     magick_binary = find_magick_binary()
@@ -543,14 +881,24 @@ def run_pipeline(
                     "ok": command_result["ok"],
                     "status": command_result.get("status"),
                     "error": command_result.get("error"),
+                    "errorCode": command_result.get("errorCode"),
+                    "errorMessage": command_result.get("errorMessage"),
+                    "errorDetails": command_result.get("errorDetails"),
+                    "responseBodySnippet": command_result.get("responseBodySnippet"),
                     "result": command_result.get("result"),
                 }
             )
             if not command_result["ok"]:
                 scenario_failed = True
-                runtime_entry["errors"].append(
-                    f"Scenario command '{command}' failed: {command_result.get('error')}"
-                )
+                command_error_code = command_result.get("errorCode")
+                if isinstance(command_error_code, str) and command_error_code:
+                    runtime_entry["errors"].append(
+                        f"Scenario command '{command}' failed [{command_error_code}]: {command_result.get('error')}"
+                    )
+                else:
+                    runtime_entry["errors"].append(
+                        f"Scenario command '{command}' failed: {command_result.get('error')}"
+                    )
                 break
 
         snapshot_path: Optional[str] = None
@@ -570,6 +918,10 @@ def run_pipeline(
                 "ok": snapshot_result["ok"],
                 "status": snapshot_result.get("status"),
                 "error": snapshot_result.get("error"),
+                "errorCode": snapshot_result.get("errorCode"),
+                "errorMessage": snapshot_result.get("errorMessage"),
+                "errorDetails": snapshot_result.get("errorDetails"),
+                "responseBodySnippet": snapshot_result.get("responseBodySnippet"),
                 "payload": snapshot_payload,
                 "result": snapshot_result.get("result"),
             }
@@ -582,7 +934,13 @@ def run_pipeline(
                     runtime_entry["errors"].append("Snapshot command returned no image path")
             else:
                 scenario_failed = True
-                runtime_entry["errors"].append(f"Snapshot failed: {snapshot_result.get('error')}")
+                snapshot_error_code = snapshot_result.get("errorCode")
+                if isinstance(snapshot_error_code, str) and snapshot_error_code:
+                    runtime_entry["errors"].append(
+                        f"Snapshot failed [{snapshot_error_code}]: {snapshot_result.get('error')}"
+                    )
+                else:
+                    runtime_entry["errors"].append(f"Snapshot failed: {snapshot_result.get('error')}")
 
         compare_result: Optional[Dict[str, Any]] = None
         if not scenario_failed and isinstance(reference_image_path, str) and reference_image_path.strip() and snapshot_path:
@@ -603,12 +961,22 @@ def run_pipeline(
                 "ok": compare_result["ok"],
                 "status": compare_result.get("status"),
                 "error": compare_result.get("error"),
+                "errorCode": compare_result.get("errorCode"),
+                "errorMessage": compare_result.get("errorMessage"),
+                "errorDetails": compare_result.get("errorDetails"),
+                "responseBodySnippet": compare_result.get("responseBodySnippet"),
                 "payload": compare_payload,
                 "result": compare_result.get("result"),
             }
             if not compare_result["ok"]:
                 scenario_failed = True
-                runtime_entry["errors"].append(f"compare-reference failed: {compare_result.get('error')}")
+                compare_error_code = compare_result.get("errorCode")
+                if isinstance(compare_error_code, str) and compare_error_code:
+                    runtime_entry["errors"].append(
+                        f"compare-reference failed [{compare_error_code}]: {compare_result.get('error')}"
+                    )
+                else:
+                    runtime_entry["errors"].append(f"compare-reference failed: {compare_result.get('error')}")
 
         image_metrics = (
             compute_image_metrics(snapshot_path, magick_binary)
@@ -710,6 +1078,7 @@ def run_pipeline(
         "mode": "terminal-probe",
         "sessionId": session_id,
         "coreBaseUrl": core_base_url,
+        "sessionLifecycle": session_lifecycle,
         "scenarioCount": len(runtime_scenarios),
         "scenarios": runtime_scenarios,
         "warnings": warnings,
@@ -726,6 +1095,7 @@ def run_pipeline(
         "generatedAt": iso_now(),
         "mode": "terminal-probe",
         "sessionId": session_id,
+        "sessionLifecycle": session_lifecycle,
         "ok": overall_ok,
         "scenarioCount": len(runtime_scenarios),
         "failedScenarioCount": len([entry for entry in runtime_scenarios if not bool(entry.get("ok"))]),
@@ -781,6 +1151,16 @@ def main() -> int:
         action="store_true",
         help="When using --session-id auto, do not reuse active session",
     )
+    parser.add_argument(
+        "--force-new-session",
+        action="store_true",
+        help="When using --session-id auto, stop active session first and always ensure a fresh session",
+    )
+    parser.add_argument(
+        "--open-tab-if-missing",
+        action="store_true",
+        help="When auto session ensure reports TARGET_NOT_FOUND, open tab via CDP /json/new and retry once",
+    )
     parser.add_argument("--scenarios", required=True, help="Path to scenario JSON file")
     parser.add_argument("--output-dir", default=None, help="Optional output directory for artifact bundle")
     parser.add_argument("--timeout-ms", type=int, default=15000, help="Default command timeout in milliseconds")
@@ -796,12 +1176,15 @@ def main() -> int:
 
     try:
         requested_session_id = str(args.session_id).strip()
+        session_lifecycle: Optional[Dict[str, Any]] = None
         resolved_session: Dict[str, Any] = {
             "requestedSessionId": requested_session_id,
             "resolvedSessionId": requested_session_id,
             "auto": False,
             "reused": None,
             "tabUrl": None,
+            "forceNewSession": bool(args.force_new_session),
+            "openTabIfMissing": bool(args.open_tab_if_missing),
         }
         if requested_session_id.lower() == "auto":
             tab_url = str(args.tab_url).strip() if isinstance(args.tab_url, str) else ""
@@ -811,19 +1194,33 @@ def main() -> int:
                     file=sys.stderr,
                 )
                 return 1
-            ensured = ensure_session(
+            auto_session_result = resolve_auto_session(
                 core_base_url=str(args.core_base_url),
                 tab_url=tab_url,
                 debug_port=max(int(args.debug_port), 1),
                 reuse_active=not bool(args.no_reuse_active),
+                force_new_session=bool(args.force_new_session),
+                open_tab_if_missing=bool(args.open_tab_if_missing),
                 timeout_seconds=max(float(args.timeout_ms) / 1000.0, 3.0),
             )
+            ensured = auto_session_result["ensured"]
+            session_lifecycle = auto_session_result.get("lifecycle")
             resolved_session = {
                 "requestedSessionId": requested_session_id,
                 "resolvedSessionId": ensured["sessionId"],
                 "auto": True,
                 "reused": ensured.get("reused"),
                 "tabUrl": ensured.get("attachedTargetUrl") or tab_url,
+                "forceNewSession": bool(args.force_new_session),
+                "openTabIfMissing": bool(args.open_tab_if_missing),
+                "lifecycle": session_lifecycle,
+            }
+        else:
+            session_lifecycle = {
+                "forceNewSession": False,
+                "openTabIfMissing": False,
+                "failureCategory": None,
+                "actions": [],
             }
 
         scenarios = load_scenarios(scenarios_path)
@@ -834,6 +1231,7 @@ def main() -> int:
             scenarios=scenarios,
             output_dir=output_dir,
             timeout_ms=max(int(args.timeout_ms), 1000),
+            session_lifecycle=session_lifecycle,
         )
         result["resolvedSession"] = resolved_session
     except Exception as exc:  # noqa: BLE001
@@ -852,6 +1250,9 @@ def main() -> int:
         print(f"- summaryJsonPath: {result['summaryJsonPath']}")
         if isinstance(result.get("resolvedSession"), dict):
             print(f"- resolvedSession: {json.dumps(result['resolvedSession'], ensure_ascii=True)}")
+        session_lifecycle = result.get("resolvedSession", {}).get("lifecycle")
+        if isinstance(session_lifecycle, dict):
+            print(f"- sessionLifecycle: {json.dumps(session_lifecycle, ensure_ascii=True)}")
         if result["warnings"]:
             print(f"- warnings: {json.dumps(result['warnings'], ensure_ascii=True)}")
 

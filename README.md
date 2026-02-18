@@ -76,6 +76,8 @@ Bootstrap notes:
 - `checks.appUrl.recommendedCommands` (object entries) and `checks.appUrl.recommendedCommandsText` (string entries) prioritize `--apply-recommended` on mismatch to avoid rerun loops.
 - `checks.appUrl.primaryRecommendedCommand` provides a copy-ready command string for fast remediation.
 - Inspect `browserInstrumentation.failureCategory` to distinguish `network-mismatch-only` vs `endpoint-unavailable`.
+- Use `readyForScenarioRun` + `readinessReasons` as the final go/no-go verdict before scenario pipelines.
+- Strict readiness gate blocks scenario launch on `app-url-gate:*` and, in `browser-fetch`, on `headed-evidence:*`.
 
 If guarded bootstrap falls back or Enhanced prerequisites are unavailable, continue in Core mode.
 
@@ -159,6 +161,19 @@ Enhanced fallback helper (terminal-probe scenario pipeline):
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
 This helper captures scenario snapshots, computes metrics (`mean`, `stddev`, `nonBlackRatio`, `MAE`), and writes `runtime.json`, `metrics.json`, `summary.json`.
+Optional reliability flags for auto session flows:
+- `--force-new-session`: stop active session before `session/ensure`.
+- `--open-tab-if-missing`: attempt CDP `json/new` on `TARGET_NOT_FOUND` and retry ensure.
+
+Visual starter helper (strict readiness + optional recovery/evidence):
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json
+```
+Optional flags:
+- `--auto-recover-session`: one bounded `/health -> /session/stop -> /session/ensure` recovery attempt on `cdp-unavailable:*` or `session-state:*`.
+- `--headed-evidence`: generate headed evidence bundle.
+- `--reference-image <path>`: required with `--headed-evidence` in `browser-fetch`.
+- `--evidence-label <label>`: parity bundle label (default `visual-debug-start`).
 
 ## HTTP APIs
 Default base URLs:

@@ -41,6 +41,8 @@ def assert_fallback(payload: dict, reason_contains: str) -> None:
     assert reason_contains in payload["bootstrap"]["reason"], payload
     assert payload["browserInstrumentation"]["canInstrumentFromBrowser"] is False, payload
     assert payload["browserInstrumentation"]["mode"] == "terminal-probe", payload
+    assert payload["readyForScenarioRun"] is False, payload
+    assert isinstance(payload["readinessReasons"], list) and payload["readinessReasons"], payload
     assert payload["debugEndpoint"] is None, payload
     assert payload["queryEndpoint"] is None, payload
     assert payload["session"]["active"] is False, payload
@@ -100,9 +102,81 @@ def main() -> int:
         assert payload["bootstrap"]["status"] == "ok", payload
         assert payload["browserInstrumentation"]["canInstrumentFromBrowser"] is True, payload
         assert payload["browserInstrumentation"]["mode"] == "browser-fetch", payload
+        assert payload["readyForScenarioRun"] is True, payload
+        assert payload["readinessReasons"] == [], payload
         assert payload["debugEndpoint"] == "http://127.0.0.1:7331/debug", payload
         assert payload["queryEndpoint"] == "http://127.0.0.1:4678/events/query", payload
         assert payload["session"]["active"] is False, payload
+
+        success_terminal_probe_script = root / "success_terminal_probe_bootstrap.py"
+        write_executable(
+            success_terminal_probe_script,
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "print(json.dumps({\n"
+            "  'browserInstrumentation': {\n"
+            "    'canInstrumentFromBrowser': False,\n"
+            "    'mode': 'terminal-probe',\n"
+            "    'failureCategory': 'network-mismatch-only',\n"
+            "    'reason': 'fallback'\n"
+            "  },\n"
+            "  'session': {\n"
+            "    'active': False,\n"
+            "    'sessionId': None,\n"
+            "    'tabUrl': None,\n"
+            "    'state': None\n"
+            "  }\n"
+            "}))\n",
+        )
+        code, payload = run_case(project_root, success_terminal_probe_script)
+        assert code == 0
+        assert payload["readyForScenarioRun"] is True, payload
+        assert payload["readinessReasons"] == [], payload
+
+        success_readiness_reasons_script = root / "success_readiness_reasons_bootstrap.py"
+        write_executable(
+            success_readiness_reasons_script,
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "print(json.dumps({\n"
+            "  'browserInstrumentation': {\n"
+            "    'canInstrumentFromBrowser': True,\n"
+            "    'mode': 'browser-fetch',\n"
+            "    'reason': None\n"
+            "  },\n"
+            "  'readyForScenarioRun': False,\n"
+            "  'readinessReasons': ['headed-evidence:headless']\n"
+            "}))\n",
+        )
+        code, payload = run_case(project_root, success_readiness_reasons_script)
+        assert code == 0
+        assert payload["readyForScenarioRun"] is False, payload
+        assert payload["readinessReasons"] == ["headed-evidence:headless"], payload
+        assert payload["browserInstrumentation"]["readyForScenarioRun"] is False, payload
+
+        success_session_error_script = root / "success_session_error_bootstrap.py"
+        write_executable(
+            success_session_error_script,
+            "#!/usr/bin/env python3\n"
+            "import json\n"
+            "print(json.dumps({\n"
+            "  'browserInstrumentation': {\n"
+            "    'canInstrumentFromBrowser': True,\n"
+            "    'mode': 'browser-fetch',\n"
+            "    'reason': None\n"
+            "  },\n"
+            "  'session': {\n"
+            "    'active': True,\n"
+            "    'sessionId': 'session-1',\n"
+            "    'tabUrl': 'http://127.0.0.1:5173/',\n"
+            "    'state': 'error'\n"
+            "  }\n"
+            "}))\n",
+        )
+        code, payload = run_case(project_root, success_session_error_script)
+        assert code == 0
+        assert payload["readyForScenarioRun"] is False, payload
+        assert "session-state:error" in payload["readinessReasons"], payload
 
     print("bootstrap_guarded smoke checks passed")
     return 0

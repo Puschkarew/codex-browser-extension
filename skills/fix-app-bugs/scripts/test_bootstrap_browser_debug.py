@@ -121,6 +121,184 @@ def main() -> int:
     )
     assert endpoint_category["category"] == "endpoint-unavailable", endpoint_category
 
+    readiness_ok = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "match"},
+            "headedEvidence": {"ok": True, "headlessLikely": False},
+            "tools": {"cdp": {"ok": True, "reason": None}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": True,
+            "failureCategory": None,
+        },
+        session_summary={
+            "active": False,
+            "sessionId": None,
+            "state": None,
+            "tabUrl": None,
+        },
+    )
+    assert readiness_ok["readyForScenarioRun"] is True, readiness_ok
+    assert readiness_ok["readinessReasons"] == [], readiness_ok
+
+    readiness_not_ok = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "match"},
+            "headedEvidence": {"ok": True, "headlessLikely": False},
+            "tools": {"cdp": {"ok": False, "reason": "Connection refused"}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": True,
+            "failureCategory": None,
+        },
+        session_summary={
+            "active": True,
+            "sessionId": "session-1",
+            "state": "error",
+            "tabUrl": "http://127.0.0.1:5173/",
+        },
+    )
+    assert readiness_not_ok["readyForScenarioRun"] is False, readiness_not_ok
+    assert "cdp-unavailable:Connection refused" in readiness_not_ok["readinessReasons"], readiness_not_ok
+    assert "session-state:error" in readiness_not_ok["readinessReasons"], readiness_not_ok
+
+    readiness_terminal_probe_ok = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "match"},
+            "headedEvidence": {"ok": False, "headlessLikely": True},
+            "tools": {"cdp": {"ok": True, "reason": None}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": False,
+            "mode": "terminal-probe",
+            "failureCategory": "network-mismatch-only",
+        },
+        session_summary={
+            "active": False,
+            "sessionId": None,
+            "state": None,
+            "tabUrl": None,
+        },
+    )
+    assert readiness_terminal_probe_ok["readyForScenarioRun"] is True, readiness_terminal_probe_ok
+    assert readiness_terminal_probe_ok["readinessReasons"] == [], readiness_terminal_probe_ok
+
+    readiness_browser_fetch_blocked = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "match"},
+            "headedEvidence": {"ok": True, "headlessLikely": False},
+            "tools": {"cdp": {"ok": True, "reason": None}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": False,
+            "mode": "browser-fetch",
+            "failureCategory": "network-mismatch-only",
+        },
+        session_summary={
+            "active": False,
+            "sessionId": None,
+            "state": None,
+            "tabUrl": None,
+        },
+    )
+    assert readiness_browser_fetch_blocked["readyForScenarioRun"] is False, readiness_browser_fetch_blocked
+    assert "instrumentation-gate:network-mismatch-only" in readiness_browser_fetch_blocked["readinessReasons"], readiness_browser_fetch_blocked
+
+    readiness_app_url_gates = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "mismatch"},
+            "headedEvidence": {"ok": True, "headlessLikely": False},
+            "tools": {"cdp": {"ok": True, "reason": None}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": True,
+            "mode": "browser-fetch",
+            "failureCategory": None,
+        },
+        session_summary={
+            "active": False,
+            "sessionId": None,
+            "state": None,
+            "tabUrl": None,
+        },
+    )
+    assert readiness_app_url_gates["readyForScenarioRun"] is False, readiness_app_url_gates
+    assert "app-url-gate:mismatch" in readiness_app_url_gates["readinessReasons"], readiness_app_url_gates
+
+    for blocked_status in ["not-provided", "invalid-actual-url"]:
+        readiness_status_blocked = module.compute_scenario_readiness(
+            checks={
+                "appUrl": {"status": blocked_status},
+                "headedEvidence": {"ok": True, "headlessLikely": False},
+                "tools": {"cdp": {"ok": True, "reason": None}},
+                "coreHealth": {"ok": True},
+            },
+            browser_instrumentation={
+                "canInstrumentFromBrowser": True,
+                "mode": "browser-fetch",
+                "failureCategory": None,
+            },
+            session_summary={
+                "active": False,
+                "sessionId": None,
+                "state": None,
+                "tabUrl": None,
+            },
+        )
+        assert readiness_status_blocked["readyForScenarioRun"] is False, readiness_status_blocked
+        assert (
+            f"app-url-gate:{blocked_status}" in readiness_status_blocked["readinessReasons"]
+        ), readiness_status_blocked
+
+    readiness_headless_blocked = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "match"},
+            "headedEvidence": {"ok": False, "headlessLikely": True},
+            "tools": {"cdp": {"ok": True, "reason": None}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": True,
+            "mode": "browser-fetch",
+            "failureCategory": None,
+        },
+        session_summary={
+            "active": False,
+            "sessionId": None,
+            "state": None,
+            "tabUrl": None,
+        },
+    )
+    assert readiness_headless_blocked["readyForScenarioRun"] is False, readiness_headless_blocked
+    assert "headed-evidence:headless" in readiness_headless_blocked["readinessReasons"], readiness_headless_blocked
+
+    readiness_headed_unverified_blocked = module.compute_scenario_readiness(
+        checks={
+            "appUrl": {"status": "match"},
+            "headedEvidence": {"ok": False, "headlessLikely": None},
+            "tools": {"cdp": {"ok": True, "reason": None}},
+            "coreHealth": {"ok": True},
+        },
+        browser_instrumentation={
+            "canInstrumentFromBrowser": True,
+            "mode": "browser-fetch",
+            "failureCategory": None,
+        },
+        session_summary={
+            "active": False,
+            "sessionId": None,
+            "state": None,
+            "tabUrl": None,
+        },
+    )
+    assert readiness_headed_unverified_blocked["readyForScenarioRun"] is False, readiness_headed_unverified_blocked
+    assert "headed-evidence:unverified" in readiness_headed_unverified_blocked["readinessReasons"], readiness_headed_unverified_blocked
+
     headed_warning = module.build_headed_evidence_check({"ok": True, "headlessLikely": True})
     assert headed_warning["ok"] is False, headed_warning
     assert isinstance(headed_warning["warning"], str), headed_warning

@@ -49,6 +49,11 @@ def resolve_bootstrap_candidates(override: Optional[str]) -> List[Path]:
 
 
 def fallback_payload(project_root: str, reason: str, script_path: Optional[Path]) -> Dict[str, Any]:
+    fallback_reason = reason.strip() if isinstance(reason, str) else ""
+    readiness_reason = "bootstrap-fallback"
+    if fallback_reason:
+        snippet = fallback_reason[:180]
+        readiness_reason = f"bootstrap-fallback:{snippet}"
     return {
         "pluginRoot": None,
         "projectConfigPath": str(Path(project_root).expanduser().resolve() / ".codex" / "browser-debug.json"),
@@ -68,7 +73,10 @@ def fallback_payload(project_root: str, reason: str, script_path: Optional[Path]
             "canInstrumentFromBrowser": False,
             "mode": "terminal-probe",
             "reason": reason,
+            "readyForScenarioRun": False,
         },
+        "readyForScenarioRun": False,
+        "readinessReasons": [readiness_reason],
         "recommendations": [],
         "recommendedDiff": "",
         "appliedRecommendations": False,
@@ -105,6 +113,36 @@ def enrich_success_payload(payload: Dict[str, Any], script_path: Path) -> Dict[s
     session["tabUrl"] = session.get("tabUrl") if isinstance(session.get("tabUrl"), str) else None
     session["state"] = session.get("state") if isinstance(session.get("state"), str) else None
     result["session"] = session
+
+    readiness_reasons_raw = result.get("readinessReasons")
+    readiness_reasons: List[str] = []
+    if isinstance(readiness_reasons_raw, list):
+        for item in readiness_reasons_raw:
+            if isinstance(item, str) and item.strip():
+                readiness_reasons.append(item.strip())
+
+    ready_from_payload = result.get("readyForScenarioRun")
+    ready_for_scenario: bool
+    if isinstance(ready_from_payload, bool):
+        ready_for_scenario = ready_from_payload
+    else:
+        mode_value = mode.strip().lower() if isinstance(mode, str) else None
+        if not readiness_reasons and not can_instrument and mode_value in {None, "browser-fetch"}:
+            failure_category = browser.get("failureCategory")
+            if isinstance(failure_category, str) and failure_category:
+                readiness_reasons.append(f"instrumentation-gate:{failure_category}")
+            else:
+                readiness_reasons.append("instrumentation-gate:failed")
+        if bool(session.get("active")):
+            session_state = session.get("state")
+            normalized_state = session_state.strip().lower() if isinstance(session_state, str) else "unknown"
+            if normalized_state != "running":
+                readiness_reasons.append(f"session-state:{normalized_state}")
+        ready_for_scenario = len(readiness_reasons) == 0
+
+    result["readyForScenarioRun"] = ready_for_scenario
+    result["readinessReasons"] = readiness_reasons
+    browser["readyForScenarioRun"] = ready_for_scenario
 
     result["bootstrap"] = {
         "status": "ok",
