@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CdpController, CdpUnavailableError } from "../src/agent/cdp-controller.js";
+import { CdpController, CdpUnavailableError, CommandTimeoutError } from "../src/agent/cdp-controller.js";
 
 type FakeRuntimeValue = {
   result: {
@@ -7,13 +7,27 @@ type FakeRuntimeValue = {
   };
 };
 
-function createFakeController(runtimeValue: FakeRuntimeValue): CdpController {
+function createFakeController(
+  runtimeValue: FakeRuntimeValue,
+  options: {
+    loadEventFired?: () => Promise<unknown>;
+    navigate?: (params: { url: string }) => Promise<void>;
+    reload?: () => Promise<void>;
+  } = {},
+): CdpController {
   const controller = new CdpController();
   const fakeClient = {
     Page: {
       enable: async () => undefined,
-      reload: async () => undefined,
-      once: (_eventName: string, _handler: () => void) => undefined,
+      reload: options.reload
+        ? async () => options.reload?.()
+        : async () => undefined,
+      navigate: options.navigate
+        ? async (params: { url: string }) => options.navigate?.(params)
+        : async () => undefined,
+      loadEventFired: options.loadEventFired
+        ? async () => options.loadEventFired?.()
+        : async () => undefined,
       captureScreenshot: async () => ({ data: "" }),
     },
     Runtime: {
@@ -34,7 +48,42 @@ function createFakeController(runtimeValue: FakeRuntimeValue): CdpController {
   return controller;
 }
 
-describe("CdpController webglDiagnostics", () => {
+describe("CdpController commands", () => {
+  it("reload succeeds when load event resolves", async () => {
+    const controller = createFakeController({ result: { value: {} } });
+    await expect(controller.reload(100)).resolves.toEqual({ ok: true });
+  });
+
+  it("navigate succeeds when load event resolves", async () => {
+    const controller = createFakeController({ result: { value: {} } });
+    await expect(controller.navigate("http://localhost:3000/page", 100)).resolves.toEqual({
+      ok: true,
+      url: "http://localhost:3000/page",
+    });
+  });
+
+  it("reload times out when load event does not fire", async () => {
+    const controller = createFakeController(
+      { result: { value: {} } },
+      {
+        loadEventFired: async () => new Promise(() => undefined),
+      },
+    );
+
+    await expect(controller.reload(10)).rejects.toBeInstanceOf(CommandTimeoutError);
+  });
+
+  it("navigate times out when load event does not fire", async () => {
+    const controller = createFakeController(
+      { result: { value: {} } },
+      {
+        loadEventFired: async () => new Promise(() => undefined),
+      },
+    );
+
+    await expect(controller.navigate("http://localhost:3000/page", 10)).rejects.toBeInstanceOf(CommandTimeoutError);
+  });
+
   it("returns evaluated diagnostics object when CDP connection is present", async () => {
     const controller = createFakeController({
       result: {

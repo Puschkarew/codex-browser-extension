@@ -109,7 +109,8 @@ Each target project can provide `.codex/browser-debug.json`:
 
 ## Mode Selection Guidance
 - Choose `Core mode` for local/manual debugging and fast iteration.
-- Choose `Enhanced mode (fix-app-bugs optional addon)` when you need strict reproducibility, explicit instrumentation gates, and machine-verifiable bugfix reporting.
+- Choose `Enhanced mode (fix-app-bugs optional addon)` when you need audit-ready evidence, final parity sign-off, CI/release sign-off evidence, or strict 5-block final report output.
+- Every run should log `Mode selected + reason`.
 
 ## Workflow Auto Routing (Every Skills)
 
@@ -151,9 +152,10 @@ npm run agent:cmd -- --session <id> --do reload
 npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
 npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
-npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline --dimension-policy strict --resize-interpolation bilinear
 npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline
 npm run agent:cmd -- --session <id> --do webgl-diagnostics
+npm run agent:session -- --tab-url http://127.0.0.1:5173/ --match-strategy origin-path
 ```
 
 Enhanced fallback helper (terminal-probe scenario pipeline):
@@ -162,8 +164,11 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --p
 ```
 This helper captures scenario snapshots, computes metrics (`mean`, `stddev`, `nonBlackRatio`, `MAE`), and writes `runtime.json`, `metrics.json`, `summary.json`.
 Optional reliability flags for auto session flows:
+- `--tab-url-match-strategy origin-path`: match by origin+path first, then retry with exact URL when CDP list resolves a unique candidate.
 - `--force-new-session`: stop active session before `session/ensure`.
 - `--open-tab-if-missing`: attempt CDP `json/new` on `TARGET_NOT_FOUND` and retry ensure.
+- `--resize-interpolation nearest|bilinear`: interpolation mode for `resize-reference-to-actual` fallback.
+- `--no-normalize-reference-size`: keep strict dimension policy only.
 
 Visual starter helper (strict readiness + optional recovery/evidence):
 ```bash
@@ -171,6 +176,7 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --projec
 ```
 Optional flags:
 - `--auto-recover-session`: one bounded `/health -> /session/stop -> /session/ensure` recovery attempt on `cdp-unavailable:*` or `session-state:*`.
+- `--tab-url-match-strategy exact|origin-path|origin`: matching strategy for recovery ensure + terminal-probe auto session.
 - `--headed-evidence`: generate headed evidence bundle.
 - `--reference-image <path>`: required with `--headed-evidence` in `browser-fetch`.
 - `--evidence-label <label>`: parity bundle label (default `visual-debug-start`).
@@ -184,11 +190,12 @@ Default base URLs:
 | --- | --- | --- |
 | `/health` | `GET` | Agent status, active session, readiness (including CDP probe), and `appUrlDrift` hint vs active tab URL. |
 | `/runtime/config` | `GET`, `POST` | Read or update active runtime config. |
-| `/session/start` | `POST` | Start session and attach to tab via CDP. |
+| `/session/start` | `POST` | Start session and attach to tab via CDP (`matchStrategy`: `exact|origin-path|origin`, default `exact`). |
+| `/session/ensure` | `POST` | Ensure/reuse session (`matchStrategy`: `exact|origin-path|origin`, default `exact`; non-exact ambiguity returns `409 AMBIGUOUS_TARGET`). |
 | `/session/stop` | `POST` | Stop current session and detach CDP. |
 | `/events` | `POST` | Ingest extension runtime events (requires `X-Ingest-Token`). |
 | `/events/query` | `GET` | Query JSONL events by time window and filters. |
-| `/command` | `POST` | Execute command (`reload`, `click`, `type`, `snapshot`, `compare-reference`, `webgl-diagnostics`). |
+| `/command` | `POST` | Execute command (`reload`, `click`, `type`, `snapshot`, `compare-reference`, `webgl-diagnostics`). `compare-reference` supports `dimensionPolicy` + `resizeInterpolation`; `webgl-diagnostics` returns `readPixelsStatus/confidence/confidenceReason`. |
 | `/debug` | `OPTIONS`, `POST` | Preflight + `BUGFIX_TRACE` ingestion with origin allowlist checks. |
 
 Mode note: API surface stays the same in both modes; Enhanced mode imposes stricter workflow rules around when and how instrumentation is used.
@@ -202,6 +209,7 @@ Mode note: API surface stays the same in both modes; Enhanced mode imposes stric
 ## Troubleshooting
 - `CDP_UNAVAILABLE`: verify Chrome was started with `--remote-debugging-port=9222` and that `browser.cdpPort` matches.
 - `TARGET_NOT_FOUND`: ensure the active tab URL matches the requested `tabUrl` pattern.
+- `AMBIGUOUS_TARGET`: tighten `/session/start` or `/session/ensure` matching (`--match-strategy exact`) or provide a fully exact `tabUrl`.
 - `DOMAIN_NOT_ALLOWED` / `ORIGIN_NOT_ALLOWED` / `CORS_POLICY_BLOCKED_PATH`: update `capture.allowedDomains` and refresh runtime config.
 - `SESSION_ALREADY_RUNNING`: stop the active session first (`npm run agent:stop` or `/session/stop`).
 - `browserInstrumentation.failureCategory = network-mismatch-only`: apply first `checks.appUrl.recommendedCommands` entry with `--apply-recommended`.

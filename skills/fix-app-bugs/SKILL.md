@@ -31,10 +31,11 @@ When invoked by auto-routing:
 ## Mode Decision Helper (30 seconds)
 
 1. Use lightweight Browser Debug flow when fast local iteration is enough.
-2. Use strict `fix-app-bugs` flow when reproducibility and machine-verifiable final evidence are required.
+2. Auto-select strict `fix-app-bugs` flow when audit-ready evidence, final parity sign-off, CI/release sign-off evidence, or strict 5-block final report is required.
 3. If strict flow reports fallback, switch to `terminal-probe` immediately (no browser-fetch retry loops).
 4. For visual parity, keep one artifact bundle per checkpoint (`runtime.json`, `metrics.json`, `summary.json`, images, `notes.md`).
 5. If parity stalls for 3 cycles or 90 minutes, stop tuning and switch to rollback + retrospective planning.
+6. Every run must log `Mode selected + reason`.
 
 ## Start Questions
 
@@ -56,6 +57,7 @@ Optional quick-start helper for visual tasks:
 `python3 "$FIX_APP_BUGS_ROOT/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json`
 This helper runs guarded bootstrap, validates app-url status, optionally runs minimal terminal-probe capture, and prints next actions.
 Exit code contract: non-zero when guarded bootstrap fails, or when terminal-probe capture is executed and fails.
+The helper logs `modeSelection` and `bootstrapConfigChanges` (`appliedRecommendations`, `recommendedDiffDigest`) in JSON output.
 
 Run:
 `python3 "$FIX_APP_BUGS_ROOT/scripts/bootstrap_guarded.py" --project-root <project-root> --json`
@@ -123,6 +125,9 @@ For render bugs (diagonal split, half-screen black, invisible simulation), prefe
 `python3 "$FIX_APP_BUGS_ROOT/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id auto --tab-url <url> --scenarios "$FIX_APP_BUGS_ROOT/references/terminal-probe-scenarios.example.json" --json`
 Use a project-specific scenario file (ON/OFF/paused) derived from the example.
 You can still pass explicit `--session-id <id>` when needed.
+For auto session robustness, prefer:
+`--tab-url-match-strategy origin-path` and keep at most one retry fallback (`--open-tab-if-missing`).
+For parity resilience, keep strict-first compare and allow fallback resize only once via default policy (`dimensionPolicy=strict` then `resize-reference-to-actual`).
 
 3. Ask user to reproduce.
 Use the template in `references/repro-request-template.md` and request a timestamp window.

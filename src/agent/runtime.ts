@@ -22,7 +22,8 @@ import {
   WaitPayloadSchema,
   WebglDiagnosticsPayloadSchema,
 } from "../shared/contracts.js";
-import { CdpController, CdpUnavailableError, CommandTimeoutError, TargetNotFoundError } from "./cdp-controller.js";
+import type { CompareDimensionPolicy, ResizeInterpolation, SessionMatchStrategy } from "../shared/contracts.js";
+import { AmbiguousTargetError, CdpController, CdpUnavailableError, CommandTimeoutError, TargetNotFoundError } from "./cdp-controller.js";
 import { isAllowedHostname, isAllowedOrigin } from "./domain-match.js";
 import { compareImages, ImageCompareError } from "./image-compare.js";
 import { JsonlStore } from "./jsonl-store.js";
@@ -113,6 +114,7 @@ type UrlParts = {
   hostname: string;
   port: number;
   origin: string;
+  pathname: string;
 };
 
 function parseUrlParts(rawUrl: string): UrlParts | null {
@@ -130,6 +132,7 @@ function parseUrlParts(rawUrl: string): UrlParts | null {
       hostname,
       port,
       origin: parsed.origin,
+      pathname: parsed.pathname,
     };
   } catch {
     return null;
@@ -147,6 +150,24 @@ function buildBootstrapRemediationCommand(activeSessionTabUrl: string): string {
     ` --actual-app-url ${shellQuote(activeSessionTabUrl)}` +
     " --apply-recommended --json"
   );
+}
+
+function matchesSessionTarget(candidateUrl: string, requestedUrl: string, matchStrategy: SessionMatchStrategy): boolean {
+  if (matchStrategy === "exact") {
+    return candidateUrl === requestedUrl;
+  }
+
+  const candidate = parseUrlParts(candidateUrl);
+  const requested = parseUrlParts(requestedUrl);
+  if (!candidate || !requested) {
+    return false;
+  }
+
+  if (matchStrategy === "origin-path") {
+    return candidate.origin === requested.origin && candidate.pathname === requested.pathname;
+  }
+
+  return candidate.origin === requested.origin;
 }
 
 export function buildAppUrlDrift(
@@ -431,7 +452,8 @@ export class AgentRuntime {
     reply: FastifyReply,
     tabUrl: string,
     debugPort: number,
-  ): { tabUrl: string; debugPort: number } | FastifyReply {
+    matchStrategy: SessionMatchStrategy,
+  ): { tabUrl: string; debugPort: number; matchStrategy: SessionMatchStrategy } | FastifyReply {
     const hostname = parseHostname(tabUrl);
     if (!hostname) {
       return sendError(reply, 422, "VALIDATION_ERROR", "tabUrl must be a valid URL");
@@ -447,6 +469,7 @@ export class AgentRuntime {
     return {
       tabUrl,
       debugPort,
+      matchStrategy,
     };
   }
 
@@ -469,7 +492,7 @@ export class AgentRuntime {
     }
   }
 
-  private async startFreshSession(tabUrl: string, debugPort: number): Promise<{
+  private async startFreshSession(tabUrl: string, debugPort: number, matchStrategy: SessionMatchStrategy): Promise<{
     sessionId: string;
     ingestToken: string;
     state: string;
@@ -486,6 +509,7 @@ export class AgentRuntime {
         attachedTargetUrl = await this.cdpController.attach({
           tabUrlPattern: tabUrl,
           debugPort,
+          matchStrategy,
         });
         break;
       } catch (error) {
@@ -497,6 +521,9 @@ export class AgentRuntime {
     if (!attachedTargetUrl) {
       this.sessionManager.markError();
       if (lastError instanceof TargetNotFoundError) {
+        throw lastError;
+      }
+      if (lastError instanceof AmbiguousTargetError) {
         throw lastError;
       }
       throw new CdpUnavailableError(String(lastError));
@@ -512,7 +539,12 @@ export class AgentRuntime {
     };
   }
 
-  private async ensureSession(tabUrl: string, debugPort: number, reuseActive: boolean): Promise<{
+  private async ensureSession(
+    tabUrl: string,
+    debugPort: number,
+    reuseActive: boolean,
+    matchStrategy: SessionMatchStrategy,
+  ): Promise<{
     sessionId: string;
     ingestToken: string;
     state: string;
@@ -522,7 +554,9 @@ export class AgentRuntime {
     const active = this.sessionManager.getActive();
     if (active && active.state === "running" && this.cdpController.hasConnection()) {
       const activeTarget = active.attachedTargetUrl ?? active.tabUrl;
-      const sameTarget = activeTarget === tabUrl || active.tabUrl === tabUrl;
+      const sameTarget =
+        matchesSessionTarget(activeTarget, tabUrl, matchStrategy) ||
+        matchesSessionTarget(active.tabUrl, tabUrl, matchStrategy);
       if (reuseActive && sameTarget) {
         return {
           sessionId: active.sessionId,
@@ -540,7 +574,7 @@ export class AgentRuntime {
       await this.stopActiveSessionIfAny();
     }
 
-    return this.startFreshSession(tabUrl, debugPort);
+    return this.startFreshSession(tabUrl, debugPort, matchStrategy);
   }
 
   private registerCoreRoutes(): void {
@@ -598,13 +632,18 @@ export class AgentRuntime {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid /session/start payload", parsed.error.flatten());
       }
 
-      const target = this.validateSessionTargetOrReply(reply, parsed.data.tabUrl, parsed.data.debugPort);
+      const target = this.validateSessionTargetOrReply(
+        reply,
+        parsed.data.tabUrl,
+        parsed.data.debugPort,
+        parsed.data.matchStrategy,
+      );
       if (!("tabUrl" in target)) {
         return target;
       }
 
       try {
-        const session = await this.ensureSession(target.tabUrl, target.debugPort, false);
+        const session = await this.ensureSession(target.tabUrl, target.debugPort, false, target.matchStrategy);
         return reply.code(200).send({
           sessionId: session.sessionId,
           ingestToken: session.ingestToken,
@@ -626,6 +665,13 @@ export class AgentRuntime {
         if (error instanceof TargetNotFoundError) {
           return sendError(reply, 404, "TARGET_NOT_FOUND", "No matching tab found for tabUrl");
         }
+        if (error instanceof AmbiguousTargetError) {
+          return sendError(reply, 409, "AMBIGUOUS_TARGET", "Multiple tabs match tabUrl", {
+            tabUrl: target.tabUrl,
+            matchStrategy: target.matchStrategy,
+            candidates: error.candidates,
+          });
+        }
         if (error instanceof CdpUnavailableError) {
           return sendError(reply, 503, "CDP_UNAVAILABLE", "Unable to connect to CDP", { reason: error.message });
         }
@@ -639,13 +685,23 @@ export class AgentRuntime {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid /session/ensure payload", parsed.error.flatten());
       }
 
-      const target = this.validateSessionTargetOrReply(reply, parsed.data.tabUrl, parsed.data.debugPort);
+      const target = this.validateSessionTargetOrReply(
+        reply,
+        parsed.data.tabUrl,
+        parsed.data.debugPort,
+        parsed.data.matchStrategy,
+      );
       if (!("tabUrl" in target)) {
         return target;
       }
 
       try {
-        const session = await this.ensureSession(target.tabUrl, target.debugPort, parsed.data.reuseActive);
+        const session = await this.ensureSession(
+          target.tabUrl,
+          target.debugPort,
+          parsed.data.reuseActive,
+          target.matchStrategy,
+        );
         return reply.code(200).send({
           sessionId: session.sessionId,
           ingestToken: session.ingestToken,
@@ -666,6 +722,13 @@ export class AgentRuntime {
         }
         if (error instanceof TargetNotFoundError) {
           return sendError(reply, 404, "TARGET_NOT_FOUND", "No matching tab found for tabUrl");
+        }
+        if (error instanceof AmbiguousTargetError) {
+          return sendError(reply, 409, "AMBIGUOUS_TARGET", "Multiple tabs match tabUrl", {
+            tabUrl: target.tabUrl,
+            matchStrategy: target.matchStrategy,
+            candidates: error.candidates,
+          });
         }
         if (error instanceof CdpUnavailableError) {
           return sendError(reply, 503, "CDP_UNAVAILABLE", "Unable to connect to CDP", { reason: error.message });
@@ -838,12 +901,16 @@ export class AgentRuntime {
       referenceImagePath: string;
       label?: string;
       writeDiff: boolean;
+      dimensionPolicy: CompareDimensionPolicy;
+      resizeInterpolation: ResizeInterpolation;
     },
   ): Record<string, unknown> {
     const compared = compareImages({
       actualImagePath: payload.actualImagePath,
       referenceImagePath: payload.referenceImagePath,
       writeDiff: payload.writeDiff,
+      dimensionPolicy: payload.dimensionPolicy,
+      resizeInterpolation: payload.resizeInterpolation,
     });
 
     const run = this.store.createArtifactRun(sessionId, payload.label ?? "compare-reference");
@@ -864,6 +931,8 @@ export class AgentRuntime {
         actualFormat: compared.actualFormat,
         referenceFormat: compared.referenceFormat,
         writeDiff: payload.writeDiff,
+        dimensionPolicy: payload.dimensionPolicy,
+        resizeInterpolation: payload.resizeInterpolation,
       },
       output: {
         actualImagePath,

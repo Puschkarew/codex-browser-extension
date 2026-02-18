@@ -26,11 +26,12 @@ If no mode is explicitly selected, default to `Core mode`.
 
 ## Mode Decision Helper (30 seconds)
 1. Use `Core mode` for local iteration, exploratory debugging, and quick command loops.
-2. Use `Enhanced mode (fix-app-bugs optional addon)` when reproducibility and machine-verifiable evidence are required.
+2. Auto-select `Enhanced mode (fix-app-bugs optional addon)` when any of these are required: audit-ready evidence, final parity sign-off, CI/release sign-off evidence, or strict 5-block final report.
 3. If uncertain, start in `Core mode` and switch only when strict report/cleanup rules become necessary.
 4. Switch from `Core` to `Enhanced` when you need guarded bootstrap verdicts or audit-ready final reporting.
 5. In `Enhanced`, if `browserInstrumentation.canInstrumentFromBrowser = false` (or `bootstrap.status = fallback`), continue in `terminal-probe` instead of retry loops.
 6. For visual parity tasks, keep one artifact bundle (`runtime.json`, `metrics.json`, `summary.json`, images) per checkpoint.
+7. Every run must log `Mode selected + reason`.
 
 ## Workflow Auto-Routing Contract
 
@@ -70,9 +71,11 @@ extensions/humans-debugger
 - No guarded bootstrap is required.
 - Use standard APIs and CLI commands (`/health`, `/events/query`, `/command`, `npm run agent:*`).
 - Use evidence and reporting format appropriate for the task; strict 5-block report format is not mandatory unless explicitly requested.
+- Log `Mode selected + reason` at run start.
 
 ## Enhanced Mode Policy (fix-app-bugs optional addon)
 Use this mode when strict reproducibility and machine-verifiable bugfix flows are required.
+- Log `Mode selected + reason` at run start.
 
 ### Instrumentation Gate (Enhanced mode only)
 1. Ensure `CODEX_HOME` is set:
@@ -157,9 +160,10 @@ npm run agent:cmd -- --session <id> --do reload
 npm run agent:cmd -- --session <id> --do click --selector "button[data-test=save]"
 npm run agent:cmd -- --session <id> --do type --selector "input[name=email]" --text "user@example.com" --clear
 npm run agent:cmd -- --session <id> --do snapshot --fullPage
-npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline --dimension-policy strict --resize-interpolation bilinear
 npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline
 npm run agent:cmd -- --session <id> --do webgl-diagnostics
+npm run agent:session -- --tab-url http://127.0.0.1:5173/ --match-strategy origin-path
 ```
 - Run tests: `npm test`
 - Skill sync check before commit/push: `npm run skill:sync:check`
@@ -178,7 +182,7 @@ bash "$CODEX_HOME/skills/fix-app-bugs/scripts/cleanup_guarded.sh" .
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
-  - Optional reliability flags for `--session-id auto`: `--force-new-session`, `--open-tab-if-missing`.
+  - Optional reliability flags for `--session-id auto`: `--tab-url-match-strategy origin-path`, `--force-new-session`, `--open-tab-if-missing`.
 - Visual starter helper:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json

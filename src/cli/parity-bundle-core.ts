@@ -11,6 +11,8 @@ export type ParityBundleOptions = {
   actualImagePath?: string;
   writeDiff?: boolean;
   headlessImagePath?: string;
+  dimensionPolicy?: "strict" | "resize-reference-to-actual";
+  resizeInterpolation?: "nearest" | "bilinear";
 };
 
 type CommandResponse = {
@@ -158,6 +160,8 @@ export async function runParityBundle(
   const timeoutMs = Number.isFinite(options.timeoutMs) && (options.timeoutMs ?? 0) > 0
     ? Math.floor(options.timeoutMs as number)
     : 20_000;
+  const dimensionPolicy = options.dimensionPolicy ?? "strict";
+  const resizeInterpolation = options.resizeInterpolation ?? "bilinear";
 
   let actualSourcePath = asString(options.actualImagePath);
   let headedSnapshotPath: string | null = null;
@@ -190,6 +194,8 @@ export async function runParityBundle(
       referenceImagePath,
       label,
       writeDiff: options.writeDiff ?? true,
+      dimensionPolicy,
+      resizeInterpolation,
     },
     options.sessionId,
   );

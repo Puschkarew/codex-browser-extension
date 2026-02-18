@@ -5,10 +5,11 @@ For default standalone usage, start with [README.md](README.md) and follow `Core
 
 ## Mode Decision Helper (30 seconds)
 1. Stay in `Core mode` for exploratory local debugging and fast manual loops.
-2. Use `Enhanced mode` when reproducibility and strict final evidence are required.
+2. Auto-select `Enhanced mode` when audit-ready evidence, final parity sign-off, CI/release sign-off evidence, or strict 5-block reporting is required.
 3. If guarded bootstrap returns `canInstrumentFromBrowser = false` or `bootstrap.status = fallback`, run `terminal-probe` immediately.
 4. For visual parity, generate one artifact bundle per checkpoint and keep at least one headed validation.
 5. If parity stalls for 3 cycles or 90 minutes, stop tuning and move to rollback + retrospective planning.
+6. Every run must log `Mode selected + reason`.
 
 ## Components
 
@@ -156,8 +157,15 @@ For bounded recovery + headed parity evidence in one run:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --auto-recover-session --headed-evidence --reference-image /path/ref.png --evidence-label baseline --json
 ```
+Optional session matching control:
+```bash
+python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --tab-url-match-strategy origin-path --json
+```
 
 Exit code contract: returns non-zero when guarded bootstrap fails, strict readiness gate remains false (`readyForScenarioRun=false` outside plan mode), headed-evidence fails, or terminal-probe capture is executed and fails.
+JSON output includes:
+1. `modeSelection` (`selectedMode`, `executionMode`, `reason`)
+2. `bootstrapConfigChanges` (`appliedRecommendations`, `recommendedDiffDigest`)
 
 If Enhanced prerequisites are unavailable, continue in `Core mode` from [README.md](README.md).
 
@@ -235,8 +243,11 @@ When running terminal-probe scenario capture/metrics:
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id auto --tab-url <url> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
 Optional reliability flags:
+- `--tab-url-match-strategy origin-path` for query/hash-tolerant auto-session resolution with exact retry on unique CDP match.
 - `--force-new-session` to stop an active session before `session/ensure`.
 - `--open-tab-if-missing` to call CDP `json/new` on `TARGET_NOT_FOUND` and retry `session/ensure`.
+- `--resize-interpolation nearest|bilinear` to control reference resize interpolation.
+- `--no-normalize-reference-size` to disable strict->resize fallback for dimension mismatch.
 - `visual_debug_start.py --auto-recover-session` to run one bounded `/health -> /session/stop -> /session/ensure` recovery attempt before re-running bootstrap.
 - `visual_debug_start.py --headed-evidence` to produce headed evidence bundle (`--reference-image` required in `browser-fetch`; terminal-probe reuses existing bundle paths).
 
@@ -279,7 +290,7 @@ npm run agent:cmd -- --session <id> --do snapshot --fullPage
 ```
 8. Compare reference images:
 ```bash
-npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline
+npm run agent:cmd -- --session <id> --do compare-reference --actual /path/app.png --reference /path/ref.png --label baseline --dimension-policy strict --resize-interpolation bilinear
 ```
 9. Parity bundle helper:
 ```bash
@@ -293,6 +304,7 @@ npm run agent:cmd -- --session <id> --do webgl-diagnostics
 Notes:
 1. `--session <id>` is optional for `/command`; when omitted, runtime uses active session if available.
 2. For `compare-reference`, command can run without active CDP session and without explicit `sessionId`.
+3. Session ensure/start support `matchStrategy` (`exact|origin-path|origin`, default `exact`).
 
 ## Retention
 

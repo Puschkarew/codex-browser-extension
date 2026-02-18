@@ -21,6 +21,10 @@ async function main(): Promise<void> {
   const health = await requestJson<HealthResponse>(`${baseUrl}/health`);
 
   const tabUrl = getArg("--tab-url") ?? health.appUrl;
+  const matchStrategy = getArg("--match-strategy") ?? "exact";
+  if (!["exact", "origin-path", "origin"].includes(matchStrategy)) {
+    throw new Error("Invalid --match-strategy value. Expected exact|origin-path|origin");
+  }
   const debugPortRaw = Number(getArg("--debug-port") ?? "");
   const debugPort = Number.isFinite(debugPortRaw) && debugPortRaw > 0
     ? Math.floor(debugPortRaw)
@@ -32,6 +36,7 @@ async function main(): Promise<void> {
       tabUrl,
       debugPort,
       reuseActive: !hasFlag("--no-reuse"),
+      matchStrategy,
     }),
   });
 

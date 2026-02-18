@@ -22,12 +22,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
 DEFAULT_CORE_BASE_URL = "http://127.0.0.1:4678"
 BODY_SNIPPET_LIMIT = 600
 SESSION_ENSURE_RETRY_LIMIT = 3
+DEFAULT_TAB_URL_MATCH_STRATEGY = "origin-path"
+DEFAULT_RESIZE_INTERPOLATION = "bilinear"
 
 
 class SessionEnsureError(RuntimeError):
@@ -108,6 +110,49 @@ def extract_error_fields(response_body: Any) -> Dict[str, Any]:
         "errorMessage": error_message,
         "errorDetails": error_details,
     }
+
+
+def parse_url_parts(raw_url: str) -> Optional[Dict[str, Any]]:
+    try:
+        parsed = urlparse(raw_url)
+    except ValueError:
+        return None
+
+    if not parsed.scheme or not parsed.hostname:
+        return None
+
+    scheme = parsed.scheme.lower()
+    hostname = parsed.hostname.lower()
+    try:
+        port = parsed.port if parsed.port is not None else (443 if scheme == "https" else 80)
+    except ValueError:
+        return None
+
+    return {
+        "scheme": scheme,
+        "hostname": hostname,
+        "port": port,
+        "origin": f"{scheme}://{hostname}:{port}",
+        "path": parsed.path or "/",
+    }
+
+
+def urls_match(candidate_url: str, requested_url: str, match_strategy: str) -> bool:
+    if match_strategy == "exact":
+        return candidate_url == requested_url
+
+    candidate = parse_url_parts(candidate_url)
+    requested = parse_url_parts(requested_url)
+    if not isinstance(candidate, dict) or not isinstance(requested, dict):
+        return False
+
+    if match_strategy == "origin-path":
+        return candidate["origin"] == requested["origin"] and candidate["path"] == requested["path"]
+
+    if match_strategy == "origin":
+        return candidate["origin"] == requested["origin"]
+
+    return False
 
 
 def http_json(
@@ -352,6 +397,7 @@ def ensure_session(
     tab_url: str,
     debug_port: int,
     reuse_active: bool,
+    match_strategy: str,
     timeout_seconds: float,
 ) -> Dict[str, Any]:
     response = http_json(
@@ -361,6 +407,7 @@ def ensure_session(
             "tabUrl": tab_url,
             "debugPort": debug_port,
             "reuseActive": reuse_active,
+            "matchStrategy": match_strategy,
         },
         timeout=timeout_seconds,
     )
@@ -437,6 +484,156 @@ def stop_session(core_base_url: str, session_id: str, timeout_seconds: float) ->
         "errorCode": error_fields.get("errorCode"),
         "errorMessage": error_fields.get("errorMessage") or response.get("error") or snippet,
         "responseBodySnippet": snippet,
+    }
+
+
+def list_tabs_via_cdp(debug_port: int, timeout_seconds: float) -> Dict[str, Any]:
+    endpoint = f"http://127.0.0.1:{debug_port}/json/list"
+    request = Request(endpoint, method="GET")
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            raw_body = response.read().decode("utf-8", errors="replace")
+            try:
+                parsed_body = json.loads(raw_body)
+            except ValueError:
+                parsed_body = None
+
+            if not isinstance(parsed_body, list):
+                return {
+                    "ok": False,
+                    "status": response.status,
+                    "endpoint": endpoint,
+                    "errorCode": "INVALID_CDP_LIST_RESPONSE",
+                    "errorMessage": "CDP /json/list did not return an array",
+                    "responseBodySnippet": sanitize_body_snippet(raw_body),
+                    "targets": [],
+                }
+
+            targets = [
+                {
+                    "id": item.get("id"),
+                    "url": item.get("url"),
+                    "type": item.get("type"),
+                }
+                for item in parsed_body
+                if isinstance(item, dict)
+            ]
+            page_targets = [
+                {
+                    "id": str(item.get("id")) if item.get("id") is not None else None,
+                    "url": str(item.get("url")) if isinstance(item.get("url"), str) else None,
+                    "type": item.get("type"),
+                }
+                for item in targets
+                if item.get("type") == "page" and isinstance(item.get("url"), str)
+            ]
+            return {
+                "ok": True,
+                "status": response.status,
+                "endpoint": endpoint,
+                "targets": page_targets,
+                "responseBodySnippet": sanitize_body_snippet(raw_body),
+            }
+    except HTTPError as exc:
+        raw_body = exc.read().decode("utf-8", errors="replace")
+        return {
+            "ok": False,
+            "status": exc.code,
+            "endpoint": endpoint,
+            "errorCode": "CDP_LIST_HTTP_ERROR",
+            "errorMessage": str(exc),
+            "responseBodySnippet": sanitize_body_snippet(raw_body),
+            "targets": [],
+        }
+    except (URLError, TimeoutError, ValueError) as exc:
+        return {
+            "ok": False,
+            "status": None,
+            "endpoint": endpoint,
+            "errorCode": "CDP_LIST_UNAVAILABLE",
+            "errorMessage": str(exc),
+            "responseBodySnippet": None,
+            "targets": [],
+        }
+
+
+def resolve_exact_tab_url_via_cdp(
+    tab_url: str,
+    debug_port: int,
+    match_strategy: str,
+    timeout_seconds: float,
+) -> Dict[str, Any]:
+    listed = list_tabs_via_cdp(debug_port, timeout_seconds)
+    if not listed.get("ok"):
+        return {
+            "ok": False,
+            "errorCode": listed.get("errorCode"),
+            "errorMessage": listed.get("errorMessage"),
+            "status": listed.get("status"),
+            "endpoint": listed.get("endpoint"),
+            "responseBodySnippet": listed.get("responseBodySnippet"),
+            "matchCount": 0,
+            "candidates": [],
+            "resolvedTabUrl": None,
+        }
+
+    targets = listed.get("targets", [])
+    if not isinstance(targets, list):
+        targets = []
+
+    matched_targets = []
+    for item in targets:
+        if not isinstance(item, dict):
+            continue
+        url_value = item.get("url")
+        if not isinstance(url_value, str):
+            continue
+        if urls_match(url_value, tab_url, match_strategy):
+            matched_targets.append(
+                {
+                    "id": item.get("id"),
+                    "url": url_value,
+                }
+            )
+
+    if len(matched_targets) == 0:
+        return {
+            "ok": False,
+            "errorCode": "TARGET_NOT_FOUND",
+            "errorMessage": "No matching tab found in CDP /json/list",
+            "status": listed.get("status"),
+            "endpoint": listed.get("endpoint"),
+            "responseBodySnippet": listed.get("responseBodySnippet"),
+            "matchCount": 0,
+            "candidates": [],
+            "resolvedTabUrl": None,
+        }
+
+    if len(matched_targets) > 1:
+        return {
+            "ok": False,
+            "errorCode": "AMBIGUOUS_TARGET",
+            "errorMessage": "Multiple tabs matched the requested URL",
+            "status": listed.get("status"),
+            "endpoint": listed.get("endpoint"),
+            "responseBodySnippet": listed.get("responseBodySnippet"),
+            "matchCount": len(matched_targets),
+            "candidates": matched_targets,
+            "resolvedTabUrl": None,
+        }
+
+    resolved = matched_targets[0]
+    return {
+        "ok": True,
+        "errorCode": None,
+        "errorMessage": None,
+        "status": listed.get("status"),
+        "endpoint": listed.get("endpoint"),
+        "responseBodySnippet": listed.get("responseBodySnippet"),
+        "matchCount": 1,
+        "candidates": matched_targets,
+        "resolvedTabUrl": resolved.get("url"),
+        "targetId": resolved.get("id"),
     }
 
 
@@ -520,11 +717,13 @@ def resolve_auto_session(
     reuse_active: bool,
     force_new_session: bool,
     open_tab_if_missing: bool,
+    tab_url_match_strategy: str,
     timeout_seconds: float,
 ) -> Dict[str, Any]:
     lifecycle: Dict[str, Any] = {
         "forceNewSession": force_new_session,
         "openTabIfMissing": open_tab_if_missing,
+        "tabUrlMatchStrategy": tab_url_match_strategy,
         "failureCategory": None,
         "actions": [],
     }
@@ -561,13 +760,16 @@ def resolve_auto_session(
         reuse_active = False
 
     opened_tab_for_target_recovery = False
+    resolved_exact_tab_url = False
+    current_tab_url = tab_url
     for attempt in range(1, SESSION_ENSURE_RETRY_LIMIT + 1):
         try:
             ensured = ensure_session(
                 core_base_url=core_base_url,
-                tab_url=tab_url,
+                tab_url=current_tab_url,
                 debug_port=debug_port,
                 reuse_active=reuse_active,
+                match_strategy=tab_url_match_strategy,
                 timeout_seconds=timeout_seconds,
             )
             lifecycle["actions"].append(
@@ -579,11 +781,15 @@ def resolve_auto_session(
                     "reused": ensured.get("reused"),
                     "sessionId": ensured.get("sessionId"),
                     "attachedTargetUrl": ensured.get("attachedTargetUrl"),
+                    "tabUrl": current_tab_url,
+                    "matchStrategy": tab_url_match_strategy,
                 }
             )
             return {
                 "ensured": ensured,
                 "lifecycle": lifecycle,
+                "resolvedTabUrl": current_tab_url,
+                "tabUrlMatchStrategy": tab_url_match_strategy,
             }
         except SessionEnsureError as exc:
             failure_category = classify_session_failure(exc)
@@ -598,15 +804,44 @@ def resolve_auto_session(
                     "errorMessage": exc.error_message,
                     "responseBodySnippet": exc.response_body_snippet,
                     "failureCategory": failure_category,
+                    "tabUrl": current_tab_url,
+                    "matchStrategy": tab_url_match_strategy,
                 }
             )
+
+            if failure_category == "target-not-found" and not resolved_exact_tab_url:
+                resolved_tab = resolve_exact_tab_url_via_cdp(
+                    tab_url=current_tab_url,
+                    debug_port=debug_port,
+                    match_strategy=tab_url_match_strategy,
+                    timeout_seconds=timeout_seconds,
+                )
+                lifecycle["actions"].append(
+                    {
+                        "action": "resolve-target-from-cdp-list",
+                        **resolved_tab,
+                    }
+                )
+                if bool(resolved_tab.get("ok")) and isinstance(resolved_tab.get("resolvedTabUrl"), str):
+                    current_tab_url = str(resolved_tab["resolvedTabUrl"])
+                    tab_url_match_strategy = "exact"
+                    resolved_exact_tab_url = True
+                    continue
+                if resolved_tab.get("errorCode") == "AMBIGUOUS_TARGET":
+                    lifecycle["failureCategory"] = "ambiguous-target"
+                    raise RuntimeError(
+                        "session ensure failed: "
+                        f"status={exc.status} "
+                        f"code=AMBIGUOUS_TARGET "
+                        f"message={resolved_tab.get('errorMessage')}"
+                    ) from exc
 
             if (
                 open_tab_if_missing
                 and not opened_tab_for_target_recovery
                 and failure_category == "target-not-found"
             ):
-                open_tab_result = open_tab_via_cdp(tab_url, debug_port, timeout_seconds)
+                open_tab_result = open_tab_via_cdp(current_tab_url, debug_port, timeout_seconds)
                 lifecycle["actions"].append(
                     {
                         "action": "open-tab-if-missing",
@@ -798,6 +1033,62 @@ def extract_framebuffer_non_black_ratio(runtime_entry: Dict[str, Any]) -> Option
     return None
 
 
+def should_retry_navigate_with_evaluate(command_result: Dict[str, Any]) -> bool:
+    if command_result.get("ok"):
+        return False
+    error_text = " ".join(
+        [
+            str(command_result.get("error") or ""),
+            str(command_result.get("errorMessage") or ""),
+            str(command_result.get("responseBodySnippet") or ""),
+        ]
+    ).lower()
+    return "page.once is not a function" in error_text or "client.page.once" in error_text
+
+
+def build_navigate_fallback_expression(url: str) -> str:
+    escaped = json.dumps(url)
+    return (
+        "(() => { "
+        f"window.location.assign({escaped}); "
+        "return { ok: true, via: 'location.assign' }; "
+        "})()"
+    )
+
+
+def classify_failure_bucket(runtime_entry: Dict[str, Any]) -> str:
+    tooling_error_codes = {
+        "CDP_UNAVAILABLE",
+        "SESSION_NOT_FOUND",
+        "TARGET_NOT_FOUND",
+        "SESSION_ALREADY_RUNNING",
+        "COMMAND_TIMEOUT",
+        "VALIDATION_ERROR",
+        "AMBIGUOUS_TARGET",
+        "IMAGE_DIMENSION_MISMATCH",
+        "FILE_NOT_FOUND",
+        "UNSUPPORTED_IMAGE_FORMAT",
+    }
+
+    command_entries = runtime_entry.get("commands")
+    if isinstance(command_entries, list):
+        for item in command_entries:
+            if not isinstance(item, dict):
+                continue
+            error_code = item.get("errorCode")
+            if isinstance(error_code, str) and error_code in tooling_error_codes:
+                return "tooling"
+
+    for key in ["snapshot", "compareReference"]:
+        record = runtime_entry.get(key)
+        if isinstance(record, dict):
+            error_code = record.get("errorCode")
+            if isinstance(error_code, str) and error_code in tooling_error_codes:
+                return "tooling"
+
+    return "app"
+
+
 def prepare_output_dir(project_root: Path, output_dir: Optional[str], session_id: str) -> Path:
     if output_dir:
         root = Path(output_dir).expanduser().resolve()
@@ -834,6 +1125,10 @@ def run_pipeline(
     output_dir: Path,
     timeout_ms: int,
     session_lifecycle: Optional[Dict[str, Any]] = None,
+    normalize_reference_size: bool = True,
+    resize_interpolation: str = DEFAULT_RESIZE_INTERPOLATION,
+    navigate_fallback: bool = True,
+    mode_selection: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     timeout_seconds = max(timeout_ms / 1000.0, 1.0)
     magick_binary = find_magick_binary()
@@ -889,6 +1184,59 @@ def run_pipeline(
                 }
             )
             if not command_result["ok"]:
+                fallback_recovered = False
+                if command == "navigate" and navigate_fallback and should_retry_navigate_with_evaluate(command_result):
+                    fallback_payload = {
+                        "expression": build_navigate_fallback_expression(str(payload.get("url") or "")),
+                        "awaitPromise": True,
+                        "returnByValue": True,
+                        "timeoutMs": timeout_ms,
+                    }
+                    fallback_result = run_core_command(
+                        core_base_url,
+                        session_id,
+                        "evaluate",
+                        fallback_payload,
+                        timeout_seconds,
+                    )
+                    runtime_entry["commands"].append(
+                        {
+                            "command": "evaluate",
+                            "payload": fallback_payload,
+                            "ok": fallback_result["ok"],
+                            "status": fallback_result.get("status"),
+                            "error": fallback_result.get("error"),
+                            "errorCode": fallback_result.get("errorCode"),
+                            "errorMessage": fallback_result.get("errorMessage"),
+                            "errorDetails": fallback_result.get("errorDetails"),
+                            "responseBodySnippet": fallback_result.get("responseBodySnippet"),
+                            "result": fallback_result.get("result"),
+                            "fallbackFor": "navigate",
+                        }
+                    )
+                    if fallback_result["ok"]:
+                        fallback_recovered = True
+                        warnings.append(
+                            "Navigate fallback used evaluate(window.location.assign(...)) after navigate command failure."
+                        )
+                    else:
+                        scenario_failed = True
+                        fallback_error_code = fallback_result.get("errorCode")
+                        if isinstance(fallback_error_code, str) and fallback_error_code:
+                            runtime_entry["errors"].append(
+                                "Scenario command 'navigate' fallback failed "
+                                f"[{fallback_error_code}]: {fallback_result.get('error')}"
+                            )
+                        else:
+                            runtime_entry["errors"].append(
+                                "Scenario command 'navigate' fallback failed: "
+                                f"{fallback_result.get('error')}"
+                            )
+                        break
+
+                if fallback_recovered:
+                    continue
+
                 scenario_failed = True
                 command_error_code = command_result.get("errorCode")
                 if isinstance(command_error_code, str) and command_error_code:
@@ -944,18 +1292,77 @@ def run_pipeline(
 
         compare_result: Optional[Dict[str, Any]] = None
         if not scenario_failed and isinstance(reference_image_path, str) and reference_image_path.strip() and snapshot_path:
-            compare_payload = {
+            compare_payload_strict = {
                 "actualImagePath": snapshot_path,
                 "referenceImagePath": reference_image_path,
                 "label": scenario_name,
                 "writeDiff": True,
+                "dimensionPolicy": "strict",
+                "resizeInterpolation": resize_interpolation,
             }
+            compare_attempts: List[Dict[str, Any]] = []
             compare_result = run_core_command(
                 core_base_url,
                 session_id,
                 "compare-reference",
-                compare_payload,
+                compare_payload_strict,
                 timeout_seconds,
+            )
+            compare_attempts.append(
+                {
+                    "ok": compare_result["ok"],
+                    "status": compare_result.get("status"),
+                    "error": compare_result.get("error"),
+                    "errorCode": compare_result.get("errorCode"),
+                    "errorMessage": compare_result.get("errorMessage"),
+                    "errorDetails": compare_result.get("errorDetails"),
+                    "responseBodySnippet": compare_result.get("responseBodySnippet"),
+                    "payload": compare_payload_strict,
+                    "result": compare_result.get("result"),
+                }
+            )
+
+            if (
+                not compare_result["ok"]
+                and compare_result.get("errorCode") == "IMAGE_DIMENSION_MISMATCH"
+                and normalize_reference_size
+            ):
+                compare_payload_resize = {
+                    "actualImagePath": snapshot_path,
+                    "referenceImagePath": reference_image_path,
+                    "label": scenario_name,
+                    "writeDiff": True,
+                    "dimensionPolicy": "resize-reference-to-actual",
+                    "resizeInterpolation": resize_interpolation,
+                }
+                compare_result = run_core_command(
+                    core_base_url,
+                    session_id,
+                    "compare-reference",
+                    compare_payload_resize,
+                    timeout_seconds,
+                )
+                compare_attempts.append(
+                    {
+                        "ok": compare_result["ok"],
+                        "status": compare_result.get("status"),
+                        "error": compare_result.get("error"),
+                        "errorCode": compare_result.get("errorCode"),
+                        "errorMessage": compare_result.get("errorMessage"),
+                        "errorDetails": compare_result.get("errorDetails"),
+                        "responseBodySnippet": compare_result.get("responseBodySnippet"),
+                        "payload": compare_payload_resize,
+                        "result": compare_result.get("result"),
+                    }
+                )
+                if compare_result["ok"]:
+                    warnings.append(
+                        f"compare-reference auto-resized reference for scenario '{scenario_name}' "
+                        f"using {resize_interpolation} interpolation."
+                    )
+
+            final_compare_payload = (
+                compare_attempts[-1].get("payload") if compare_attempts else compare_payload_strict
             )
             runtime_entry["compareReference"] = {
                 "ok": compare_result["ok"],
@@ -965,8 +1372,10 @@ def run_pipeline(
                 "errorMessage": compare_result.get("errorMessage"),
                 "errorDetails": compare_result.get("errorDetails"),
                 "responseBodySnippet": compare_result.get("responseBodySnippet"),
-                "payload": compare_payload,
+                "payload": final_compare_payload,
                 "result": compare_result.get("result"),
+                "attempts": compare_attempts,
+                "fallbackApplied": len(compare_attempts) > 1,
             }
             if not compare_result["ok"]:
                 scenario_failed = True
@@ -1072,10 +1481,21 @@ def run_pipeline(
         )
 
     overall_ok = all(bool(entry.get("ok")) for entry in runtime_scenarios)
+    tooling_failures = [
+        entry.get("name")
+        for entry in runtime_scenarios
+        if not bool(entry.get("ok")) and classify_failure_bucket(entry) == "tooling"
+    ]
+    app_failures = [
+        entry.get("name")
+        for entry in runtime_scenarios
+        if not bool(entry.get("ok")) and classify_failure_bucket(entry) == "app"
+    ]
 
     runtime_payload = {
         "generatedAt": iso_now(),
         "mode": "terminal-probe",
+        "modeSelection": mode_selection,
         "sessionId": session_id,
         "coreBaseUrl": core_base_url,
         "sessionLifecycle": session_lifecycle,
@@ -1094,12 +1514,15 @@ def run_pipeline(
     summary_payload = {
         "generatedAt": iso_now(),
         "mode": "terminal-probe",
+        "modeSelection": mode_selection,
         "sessionId": session_id,
         "sessionLifecycle": session_lifecycle,
         "ok": overall_ok,
         "scenarioCount": len(runtime_scenarios),
         "failedScenarioCount": len([entry for entry in runtime_scenarios if not bool(entry.get("ok"))]),
         "scenariosWithReference": len([entry for entry in metrics_scenarios if entry.get("compareMetrics") is not None]),
+        "toolingFailures": [item for item in tooling_failures if isinstance(item, str)],
+        "appFailures": [item for item in app_failures if isinstance(item, str)],
         "averages": {
             "mean": average(mean_values),
             "stddev": average(stddev_values),
@@ -1127,6 +1550,8 @@ def run_pipeline(
         "warnings": warnings,
         "scenarioCount": len(runtime_scenarios),
         "failedScenarioCount": summary_payload["failedScenarioCount"],
+        "toolingFailures": summary_payload["toolingFailures"],
+        "appFailures": summary_payload["appFailures"],
     }
 
 
@@ -1147,6 +1572,12 @@ def main() -> int:
     parser.add_argument("--tab-url", default=None, help="Required with --session-id auto")
     parser.add_argument("--debug-port", type=int, default=9222, help="CDP port for --session-id auto")
     parser.add_argument(
+        "--tab-url-match-strategy",
+        choices=["exact", "origin-path", "origin"],
+        default=DEFAULT_TAB_URL_MATCH_STRATEGY,
+        help="Target matching strategy used for /session/ensure in auto mode",
+    )
+    parser.add_argument(
         "--no-reuse-active",
         action="store_true",
         help="When using --session-id auto, do not reuse active session",
@@ -1164,6 +1595,22 @@ def main() -> int:
     parser.add_argument("--scenarios", required=True, help="Path to scenario JSON file")
     parser.add_argument("--output-dir", default=None, help="Optional output directory for artifact bundle")
     parser.add_argument("--timeout-ms", type=int, default=15000, help="Default command timeout in milliseconds")
+    parser.add_argument(
+        "--no-normalize-reference-size",
+        action="store_true",
+        help="Disable automatic compare-reference retry with resize-reference-to-actual",
+    )
+    parser.add_argument(
+        "--resize-interpolation",
+        choices=["nearest", "bilinear"],
+        default=DEFAULT_RESIZE_INTERPOLATION,
+        help="Interpolation mode used when auto-resizing reference images",
+    )
+    parser.add_argument(
+        "--no-navigate-fallback",
+        action="store_true",
+        help="Disable navigate->evaluate(location.assign) fallback for known navigate transport failures",
+    )
     parser.add_argument("--json", action="store_true", help="Print machine-readable output")
 
     args = parser.parse_args()
@@ -1177,12 +1624,21 @@ def main() -> int:
     try:
         requested_session_id = str(args.session_id).strip()
         session_lifecycle: Optional[Dict[str, Any]] = None
+        mode_selection = {
+            "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+            "executionMode": "terminal-probe",
+            "reason": (
+                "Terminal-probe pipeline explicitly selected for machine-verifiable fallback "
+                "or direct scenario capture."
+            ),
+        }
         resolved_session: Dict[str, Any] = {
             "requestedSessionId": requested_session_id,
             "resolvedSessionId": requested_session_id,
             "auto": False,
             "reused": None,
             "tabUrl": None,
+            "tabUrlMatchStrategy": args.tab_url_match_strategy,
             "forceNewSession": bool(args.force_new_session),
             "openTabIfMissing": bool(args.open_tab_if_missing),
         }
@@ -1201,16 +1657,28 @@ def main() -> int:
                 reuse_active=not bool(args.no_reuse_active),
                 force_new_session=bool(args.force_new_session),
                 open_tab_if_missing=bool(args.open_tab_if_missing),
+                tab_url_match_strategy=str(args.tab_url_match_strategy),
                 timeout_seconds=max(float(args.timeout_ms) / 1000.0, 3.0),
             )
             ensured = auto_session_result["ensured"]
             session_lifecycle = auto_session_result.get("lifecycle")
+            resolved_tab_url = auto_session_result.get("resolvedTabUrl")
+            resolved_match_strategy = auto_session_result.get("tabUrlMatchStrategy")
             resolved_session = {
                 "requestedSessionId": requested_session_id,
                 "resolvedSessionId": ensured["sessionId"],
                 "auto": True,
                 "reused": ensured.get("reused"),
-                "tabUrl": ensured.get("attachedTargetUrl") or tab_url,
+                "tabUrl": (
+                    resolved_tab_url
+                    if isinstance(resolved_tab_url, str) and resolved_tab_url
+                    else ensured.get("attachedTargetUrl") or tab_url
+                ),
+                "tabUrlMatchStrategy": (
+                    str(resolved_match_strategy)
+                    if isinstance(resolved_match_strategy, str) and resolved_match_strategy
+                    else str(args.tab_url_match_strategy)
+                ),
                 "forceNewSession": bool(args.force_new_session),
                 "openTabIfMissing": bool(args.open_tab_if_missing),
                 "lifecycle": session_lifecycle,
@@ -1232,7 +1700,12 @@ def main() -> int:
             output_dir=output_dir,
             timeout_ms=max(int(args.timeout_ms), 1000),
             session_lifecycle=session_lifecycle,
+            normalize_reference_size=not bool(args.no_normalize_reference_size),
+            resize_interpolation=str(args.resize_interpolation),
+            navigate_fallback=not bool(args.no_navigate_fallback),
+            mode_selection=mode_selection,
         )
+        result["modeSelection"] = mode_selection
         result["resolvedSession"] = resolved_session
     except Exception as exc:  # noqa: BLE001
         print(f"terminal_probe_pipeline.py failed: {exc}", file=sys.stderr)

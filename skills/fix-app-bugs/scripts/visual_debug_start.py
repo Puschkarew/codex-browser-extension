@@ -26,6 +26,7 @@ from urllib.request import Request, urlopen
 
 
 RECOVERY_TIMEOUT_SECONDS = 5.0
+DEFAULT_TAB_URL_MATCH_STRATEGY = "origin-path"
 
 
 def as_string(value: Any) -> Optional[str]:
@@ -113,17 +114,23 @@ def make_starter_scenarios_file(actual_app_url: str, scenario_profile: str) -> P
     fd, temp_path = tempfile.mkstemp(prefix="fix-app-bugs-starter-", suffix=".json")
     os.close(fd)
     path = Path(temp_path)
+    expected_url_literal = json.dumps(actual_app_url)
 
     if scenario_profile == "drag-parity":
         payload = [
             {
                 "name": "starter-drag-rest",
                 "commands": [
-                    {"do": "navigate", "url": actual_app_url},
+                    {"do": "reload"},
                     {"do": "wait", "ms": 250},
                     {
                         "do": "evaluate",
-                        "expression": "({ readyState: document.readyState, width: window.innerWidth, height: window.innerHeight })",
+                        "expression": (
+                            "({ readyState: document.readyState, width: window.innerWidth, "
+                            "height: window.innerHeight, href: window.location.href, expected: "
+                            + expected_url_literal
+                            + " })"
+                        ),
                     },
                 ],
                 "fullPage": True,
@@ -144,7 +151,18 @@ def make_starter_scenarios_file(actual_app_url: str, scenario_profile: str) -> P
         payload = [
             {
                 "name": "starter-baseline",
-                "commands": [{"do": "navigate", "url": actual_app_url}],
+                "commands": [
+                    {"do": "reload"},
+                    {
+                        "do": "evaluate",
+                        "expression": (
+                            "({ readyState: document.readyState, href: window.location.href, "
+                            "expected: "
+                            + expected_url_literal
+                            + " })"
+                        ),
+                    },
+                ],
                 "fullPage": True,
             }
         ]
@@ -259,6 +277,34 @@ def collect_next_actions(payload: Dict[str, Any]) -> List[str]:
     return actions
 
 
+def summarize_recommended_diff(raw_diff: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(raw_diff, str):
+        return None
+    lines = [line for line in raw_diff.splitlines() if line.strip()]
+    if not lines:
+        return None
+
+    added_lines = 0
+    removed_lines = 0
+    preview: List[str] = []
+    for line in lines:
+        if line.startswith(("---", "+++", "@@")):
+            continue
+        if line.startswith("+"):
+            added_lines += 1
+        elif line.startswith("-"):
+            removed_lines += 1
+        if len(preview) < 6:
+            preview.append(line)
+
+    return {
+        "lineCount": len(lines),
+        "addedLines": added_lines,
+        "removedLines": removed_lines,
+        "preview": preview,
+    }
+
+
 def extract_bootstrap_context(bootstrap_payload: Optional[Dict[str, Any]], fallback_actual_app_url: str) -> Dict[str, Any]:
     payload = bootstrap_payload if isinstance(bootstrap_payload, dict) else {}
     mode = resolve_mode(payload)
@@ -286,6 +332,8 @@ def extract_bootstrap_context(bootstrap_payload: Optional[Dict[str, Any]], fallb
 
     readiness = derive_readiness(payload, mode)
     plugin_root = as_string(payload.get("pluginRoot"))
+    applied_recommendations = bool(payload.get("appliedRecommendations"))
+    recommended_diff_digest = summarize_recommended_diff(payload.get("recommendedDiff"))
     return {
         "mode": mode,
         "pluginRoot": plugin_root,
@@ -298,6 +346,8 @@ def extract_bootstrap_context(bootstrap_payload: Optional[Dict[str, Any]], fallb
         "recommendedCommands": extract_recommended_commands(app_url_check),
         "sessionId": session_id,
         "readiness": readiness,
+        "appliedRecommendations": applied_recommendations,
+        "recommendedDiffDigest": recommended_diff_digest,
     }
 
 
@@ -388,6 +438,7 @@ def attempt_session_recovery(
     core_base_url: str,
     tab_url: str,
     debug_port: int,
+    tab_url_match_strategy: str,
 ) -> Dict[str, Any]:
     actions: List[Dict[str, Any]] = []
 
@@ -455,6 +506,7 @@ def attempt_session_recovery(
             "tabUrl": tab_url,
             "debugPort": max(int(debug_port), 1),
             "reuseActive": False,
+            "matchStrategy": tab_url_match_strategy,
         },
     )
     ensure_json = ensure_response.get("json")
@@ -467,6 +519,7 @@ def attempt_session_recovery(
             "ok": bool(ensure_response.get("ok")),
             "status": ensure_response.get("status"),
             "sessionId": ensured_session_id,
+            "matchStrategy": tab_url_match_strategy,
             "error": None if ensure_response.get("ok") else summarize_error(ensure_response),
         }
     )
@@ -498,6 +551,7 @@ def run_terminal_probe_capture(
     output_dir: Optional[str],
     force_new_session: bool,
     open_tab_if_missing: bool,
+    tab_url_match_strategy: str,
 ) -> Dict[str, Any]:
     command = [
         "python3",
@@ -512,6 +566,8 @@ def run_terminal_probe_capture(
         tab_url,
         "--debug-port",
         str(debug_port),
+        "--tab-url-match-strategy",
+        tab_url_match_strategy,
         "--scenarios",
         str(scenarios_path),
         "--json",
@@ -650,6 +706,12 @@ def main() -> int:
     parser.add_argument("--session-id", default="auto", help="Session id for terminal-probe pipeline")
     parser.add_argument("--debug-port", type=int, default=9222, help="CDP debug port for auto session resolve")
     parser.add_argument(
+        "--tab-url-match-strategy",
+        choices=["exact", "origin-path", "origin"],
+        default=DEFAULT_TAB_URL_MATCH_STRATEGY,
+        help="Target matching strategy used by session recovery and terminal-probe auto session ensure",
+    )
+    parser.add_argument(
         "--scenario-profile",
         choices=["baseline", "drag-parity"],
         default="baseline",
@@ -734,6 +796,7 @@ def main() -> int:
             core_base_url=str(args.core_base_url),
             tab_url=str(context["actualAppUrl"]),
             debug_port=int(args.debug_port),
+            tab_url_match_strategy=str(args.tab_url_match_strategy),
         )
         if recovery.get("result") == "success":
             bootstrap = run_json_command(bootstrap_cmd)
@@ -749,6 +812,27 @@ def main() -> int:
     readiness = context["readiness"]
     final_ready = bool(readiness["finalReady"])
     final_reasons = list(readiness["finalReasons"])
+    mode_reason = "Default Core mode remains preferred for local iteration; Enhanced helper selected for strict evidence workflow."
+    browser_instrumentation = (
+        bootstrap_payload.get("browserInstrumentation")
+        if isinstance(bootstrap_payload, dict)
+        else {}
+    )
+    if isinstance(browser_instrumentation, dict):
+        browser_reason = as_string(browser_instrumentation.get("reason"))
+        if mode == "browser-fetch":
+            mode_reason = browser_reason or "Guarded bootstrap allows browser instrumentation."
+        elif mode == "terminal-probe":
+            mode_reason = browser_reason or "Guarded bootstrap requires terminal-probe fallback."
+    mode_selection = {
+        "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+        "executionMode": mode,
+        "reason": mode_reason,
+    }
+    config_change_summary = {
+        "appliedRecommendations": bool(context["appliedRecommendations"]),
+        "recommendedDiffDigest": context.get("recommendedDiffDigest"),
+    }
 
     next_actions = collect_next_actions(bootstrap_payload if isinstance(bootstrap_payload, dict) else {})
     if recovery.get("attempted"):
@@ -756,6 +840,10 @@ def main() -> int:
             next_actions.append("Session/CDP recovery attempt succeeded; bootstrap was re-run.")
         else:
             next_actions.append("Session/CDP recovery attempt failed; inspect recovery.actions for details.")
+    if bool(config_change_summary["appliedRecommendations"]):
+        next_actions.append("Bootstrap applied recommended config updates.")
+    elif isinstance(config_change_summary.get("recommendedDiffDigest"), dict):
+        next_actions.append("Bootstrap detected config recommendations; inspect bootstrapConfigChanges.recommendedDiffDigest.")
 
     recommended_commands = context["recommendedCommands"]
     resume_command_args = [
@@ -773,6 +861,8 @@ def main() -> int:
         resume_command_args.append("--force-new-session")
     if args.open_tab_if_missing:
         resume_command_args.append("--open-tab-if-missing")
+    if as_string(args.tab_url_match_strategy):
+        resume_command_args.extend(["--tab-url-match-strategy", str(args.tab_url_match_strategy)])
     if args.auto_recover_session:
         resume_command_args.append("--auto-recover-session")
     if args.headed_evidence:
@@ -856,6 +946,7 @@ def main() -> int:
             output_dir=args.output_dir,
             force_new_session=bool(args.force_new_session),
             open_tab_if_missing=bool(args.open_tab_if_missing),
+            tab_url_match_strategy=str(args.tab_url_match_strategy),
         )
 
         probe_payload = terminal_probe_result.get("json")
@@ -938,6 +1029,7 @@ def main() -> int:
     output = {
         "generatedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "mode": mode,
+        "modeSelection": mode_selection,
         "exitCode": exit_code,
         "scenarioProfile": args.scenario_profile,
         "appUrlStatus": app_url_status,
@@ -947,6 +1039,7 @@ def main() -> int:
             "reasonCode": app_url_reason_code,
         },
         "bootstrap": bootstrap,
+        "bootstrapConfigChanges": config_change_summary,
         "configAlignment": config_alignment,
         "recovery": recovery,
         "readiness": readiness,
@@ -959,11 +1052,13 @@ def main() -> int:
         print(json.dumps(output, ensure_ascii=True))
     else:
         print("Visual debug starter")
+        print(f"- modeSelection: {json.dumps(mode_selection, ensure_ascii=True)}")
         print(f"- mode: {mode}")
         print(f"- checks.appUrl.status: {app_url_status}")
         print(f"- checks.appUrl.reasonCode: {app_url_reason_code}")
         print(f"- checks.appUrl.configAppUrl: {config_app_url}")
         print(f"- checks.appUrl.actualAppUrl: {actual_app_url}")
+        print(f"- bootstrapConfigChanges: {json.dumps(config_change_summary, ensure_ascii=True)}")
         print(f"- readiness.finalReady: {readiness['finalReady']}")
         print(f"- readiness.finalReasons: {json.dumps(readiness['finalReasons'], ensure_ascii=True)}")
         print(f"- recovery.result: {recovery.get('result')}")

@@ -1,8 +1,10 @@
 import CDP from "chrome-remote-interface";
+import type { SessionMatchStrategy } from "../shared/contracts.js";
 
 type AttachOptions = {
   tabUrlPattern: string;
   debugPort: number;
+  matchStrategy: SessionMatchStrategy;
 };
 
 type CdpClient = {
@@ -10,7 +12,7 @@ type CdpClient = {
     enable(): Promise<void>;
     navigate(params: { url: string }): Promise<void>;
     reload(params: { ignoreCache?: boolean }): Promise<void>;
-    once(eventName: string, handler: () => void): void;
+    loadEventFired(): Promise<unknown>;
     captureScreenshot(params: { format: "png"; fromSurface?: boolean }): Promise<{ data: string }>;
   };
   Runtime: {
@@ -35,6 +37,14 @@ type ConnectedClient = {
 export class CdpUnavailableError extends Error {}
 export class TargetNotFoundError extends Error {}
 export class CommandTimeoutError extends Error {}
+export class AmbiguousTargetError extends Error {
+  readonly candidates: Array<{ id: string; url: string }>;
+
+  constructor(candidates: Array<{ id: string; url: string }>) {
+    super("Multiple targets match the requested tabUrl");
+    this.candidates = candidates;
+  }
+}
 
 const DEFAULT_HOST = "127.0.0.1";
 
@@ -48,11 +58,23 @@ function wildcardMatch(input: string, pattern: string): boolean {
   return regex.test(input);
 }
 
+function parseTargetUrl(rawUrl: string): { origin: string; pathname: string } | null {
+  try {
+    const parsed = new URL(rawUrl);
+    return {
+      origin: parsed.origin,
+      pathname: parsed.pathname,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export class CdpController {
   private connected: ConnectedClient | null = null;
 
   async attach(options: AttachOptions): Promise<string> {
-    const target = await this.findTarget(options.tabUrlPattern, options.debugPort);
+    const target = await this.findTarget(options.tabUrlPattern, options.debugPort, options.matchStrategy);
     if (!target) {
       throw new TargetNotFoundError("No matching target found");
     }
@@ -95,23 +117,29 @@ export class CdpController {
 
   async reload(timeoutMs: number): Promise<{ ok: true }> {
     const client = this.requireClient();
-    const done = new Promise<void>((resolve) => {
-      client.Page.once("loadEventFired", () => resolve());
-    });
+    const done = this.withTimeout(client.Page.loadEventFired(), timeoutMs);
 
-    await client.Page.reload({ ignoreCache: false });
-    await this.withTimeout(done, timeoutMs);
+    try {
+      await client.Page.reload({ ignoreCache: false });
+      await done;
+    } catch (error) {
+      void done.catch(() => undefined);
+      throw error;
+    }
     return { ok: true };
   }
 
   async navigate(url: string, timeoutMs: number): Promise<{ ok: true; url: string }> {
     const client = this.requireClient();
-    const done = new Promise<void>((resolve) => {
-      client.Page.once("loadEventFired", () => resolve());
-    });
+    const done = this.withTimeout(client.Page.loadEventFired(), timeoutMs);
 
-    await client.Page.navigate({ url });
-    await this.withTimeout(done, timeoutMs);
+    try {
+      await client.Page.navigate({ url });
+      await done;
+    } catch (error) {
+      void done.catch(() => undefined);
+      throw error;
+    }
     return { ok: true, url };
   }
 
@@ -224,7 +252,11 @@ export class CdpController {
             drawingBufferWidth: 0,
             drawingBufferHeight: 0,
             meanLuminance: null,
-            nonBlackRatio: null
+            nonBlackRatio: null,
+            readPixelsStatus: "not-applicable",
+            confidence: "low",
+            confidenceReason: "scene canvas not found",
+            contextAttributes: null
           };
         }
 
@@ -239,15 +271,49 @@ export class CdpController {
             drawingBufferWidth: sceneCanvas.width || 0,
             drawingBufferHeight: sceneCanvas.height || 0,
             meanLuminance: null,
-            nonBlackRatio: null
+            nonBlackRatio: null,
+            readPixelsStatus: "no-webgl-context",
+            confidence: "low",
+            confidenceReason: "scene canvas has no WebGL context",
+            contextAttributes: null
           };
         }
 
         const width = Math.max(1, gl.drawingBufferWidth);
         const height = Math.max(1, gl.drawingBufferHeight);
         const pixels = new Uint8Array(width * height * 4);
-        gl.finish();
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        const attributes = typeof gl.getContextAttributes === "function" ? gl.getContextAttributes() : null;
+        let readPixelsStatus = "ok";
+        try {
+          gl.finish();
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        } catch {
+          readPixelsStatus = "error";
+        }
+
+        if (readPixelsStatus !== "ok") {
+          return {
+            hasCanvas: true,
+            hasWebglContext: true,
+            cssWidth: rect.width,
+            cssHeight: rect.height,
+            drawingBufferWidth: width,
+            drawingBufferHeight: height,
+            meanLuminance: null,
+            nonBlackRatio: null,
+            readPixelsStatus,
+            confidence: "low",
+            confidenceReason: "readPixels failed",
+            contextAttributes: attributes
+              ? {
+                  alpha: attributes.alpha,
+                  antialias: attributes.antialias,
+                  preserveDrawingBuffer: attributes.preserveDrawingBuffer,
+                }
+              : null
+          };
+        }
+
         let luminanceSum = 0;
         let nonBlackPixels = 0;
         const totalPixels = width * height;
@@ -260,6 +326,17 @@ export class CdpController {
             nonBlackPixels += 1;
           }
         }
+        const nonBlackRatio = totalPixels > 0 ? nonBlackPixels / totalPixels : null;
+        const preserveDrawingBuffer = attributes ? attributes.preserveDrawingBuffer : null;
+        let confidence = "high";
+        let confidenceReason = null;
+        if (preserveDrawingBuffer === false) {
+          confidence = "low";
+          confidenceReason = "preserveDrawingBuffer=false may return cleared framebuffer data";
+        } else if (nonBlackRatio === 0) {
+          confidence = "low";
+          confidenceReason = "framebuffer appears empty while the page may still render via compositor";
+        }
 
         return {
           hasCanvas: true,
@@ -269,7 +346,17 @@ export class CdpController {
           drawingBufferWidth: width,
           drawingBufferHeight: height,
           meanLuminance: totalPixels > 0 ? luminanceSum / totalPixels : null,
-          nonBlackRatio: totalPixels > 0 ? nonBlackPixels / totalPixels : null
+          nonBlackRatio,
+          readPixelsStatus,
+          confidence,
+          confidenceReason,
+          contextAttributes: attributes
+            ? {
+                alpha: attributes.alpha,
+                antialias: attributes.antialias,
+                preserveDrawingBuffer: attributes.preserveDrawingBuffer,
+              }
+            : null
         };
       }
 
@@ -349,6 +436,7 @@ export class CdpController {
   private async findTarget(
     tabUrlPattern: string,
     debugPort: number,
+    matchStrategy: SessionMatchStrategy,
   ): Promise<{ id: string; url: string } | null> {
     try {
       const targets = (await CDP.List({ host: DEFAULT_HOST, port: debugPort })) as Array<{
@@ -358,19 +446,60 @@ export class CdpController {
       }>;
       const pageTargets = targets.filter((target) => target.type === "page");
 
-      const directMatch = pageTargets.find((target) => target.url === tabUrlPattern);
-      if (directMatch) {
+      if (tabUrlPattern.includes("*")) {
+        const wildcardTarget = pageTargets.find((target) => wildcardMatch(target.url, tabUrlPattern));
+        if (!wildcardTarget) {
+          return null;
+        }
+        return { id: String(wildcardTarget.id), url: wildcardTarget.url };
+      }
+
+      if (matchStrategy === "exact") {
+        const directMatch = pageTargets.find((target) => target.url === tabUrlPattern);
+        if (!directMatch) {
+          return null;
+        }
         return { id: String(directMatch.id), url: directMatch.url };
       }
 
-      const wildcardTarget = pageTargets.find((target) => wildcardMatch(target.url, tabUrlPattern));
-
-      if (!wildcardTarget) {
+      const requested = parseTargetUrl(tabUrlPattern);
+      if (!requested) {
         return null;
       }
 
-      return { id: String(wildcardTarget.id), url: wildcardTarget.url };
+      const matched = pageTargets
+        .map((target) => ({
+          id: String(target.id),
+          url: target.url,
+          parsed: parseTargetUrl(target.url),
+        }))
+        .filter((target) => {
+          if (!target.parsed) {
+            return false;
+          }
+          if (matchStrategy === "origin-path") {
+            return target.parsed.origin === requested.origin && target.parsed.pathname === requested.pathname;
+          }
+          return target.parsed.origin === requested.origin;
+        })
+        .map((target) => ({
+          id: target.id,
+          url: target.url,
+        }));
+
+      if (matched.length === 0) {
+        return null;
+      }
+
+      if (matched.length > 1) {
+        throw new AmbiguousTargetError(matched);
+      }
+
+      return matched[0] ?? null;
     } catch (error) {
+      if (error instanceof AmbiguousTargetError) {
+        throw error;
+      }
       throw new CdpUnavailableError(String(error));
     }
   }

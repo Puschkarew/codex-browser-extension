@@ -69,6 +69,12 @@ describe("runParityBundle", () => {
       sessionId: "session-1",
       command: "compare-reference",
     });
+    expect(calls[1]?.body).toMatchObject({
+      payload: {
+        dimensionPolicy: "strict",
+        resizeInterpolation: "bilinear",
+      },
+    });
 
     expect(result.artifactDir).toBe(artifactDir);
     expect(result.notesPath).toBe(path.join(artifactDir, "notes.md"));
@@ -112,6 +118,8 @@ describe("runParityBundle", () => {
         referenceImagePath: "/tmp/reference.png",
         actualImagePath: "/tmp/actual.png",
         headlessImagePath: headlessSource,
+        dimensionPolicy: "resize-reference-to-actual",
+        resizeInterpolation: "nearest",
       },
       requester,
     );
@@ -119,6 +127,10 @@ describe("runParityBundle", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.body).toMatchObject({
       command: "compare-reference",
+      payload: {
+        dimensionPolicy: "resize-reference-to-actual",
+        resizeInterpolation: "nearest",
+      },
     });
     expect(result.headlessImagePath).toBe(path.join(artifactDir, "headless.png"));
     expect(fs.existsSync(path.join(artifactDir, "headless.png"))).toBe(true);

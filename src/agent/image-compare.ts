@@ -35,10 +35,15 @@ type DecodedImage = {
   format: "png" | "jpeg";
 };
 
+type DimensionPolicy = "strict" | "resize-reference-to-actual";
+type ResizeInterpolation = "nearest" | "bilinear";
+
 export type ImageCompareOptions = {
   actualImagePath: string;
   referenceImagePath: string;
   writeDiff: boolean;
+  dimensionPolicy: DimensionPolicy;
+  resizeInterpolation: ResizeInterpolation;
 };
 
 export type ImageCompareMetrics = {
@@ -49,6 +54,9 @@ export type ImageCompareMetrics = {
   percentDiffPixels: number;
   maeRgb: number;
   maeLuminance: number;
+  resizeApplied: boolean;
+  originalReferenceWidth: number;
+  originalReferenceHeight: number;
 };
 
 export type ImageCompareResult = {
@@ -143,18 +151,111 @@ function encodePng(width: number, height: number, rgbaData: Uint8Array): Buffer 
   return PNG.sync.write(png);
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resizeNearest(image: DecodedImage, targetWidth: number, targetHeight: number): Uint8Array {
+  const resized = new Uint8Array(targetWidth * targetHeight * 4);
+  for (let y = 0; y < targetHeight; y += 1) {
+    const srcY = Math.min(image.height - 1, Math.floor((y * image.height) / targetHeight));
+    for (let x = 0; x < targetWidth; x += 1) {
+      const srcX = Math.min(image.width - 1, Math.floor((x * image.width) / targetWidth));
+      const srcIdx = (srcY * image.width + srcX) * 4;
+      const dstIdx = (y * targetWidth + x) * 4;
+      resized[dstIdx] = image.data[srcIdx] ?? 0;
+      resized[dstIdx + 1] = image.data[srcIdx + 1] ?? 0;
+      resized[dstIdx + 2] = image.data[srcIdx + 2] ?? 0;
+      resized[dstIdx + 3] = image.data[srcIdx + 3] ?? 255;
+    }
+  }
+  return resized;
+}
+
+function resizeBilinear(image: DecodedImage, targetWidth: number, targetHeight: number): Uint8Array {
+  const resized = new Uint8Array(targetWidth * targetHeight * 4);
+  const maxX = image.width - 1;
+  const maxY = image.height - 1;
+
+  for (let y = 0; y < targetHeight; y += 1) {
+    const srcY = ((y + 0.5) * image.height) / targetHeight - 0.5;
+    const y0 = clamp(Math.floor(srcY), 0, maxY);
+    const y1 = clamp(y0 + 1, 0, maxY);
+    const wy = clamp(srcY - y0, 0, 1);
+
+    for (let x = 0; x < targetWidth; x += 1) {
+      const srcX = ((x + 0.5) * image.width) / targetWidth - 0.5;
+      const x0 = clamp(Math.floor(srcX), 0, maxX);
+      const x1 = clamp(x0 + 1, 0, maxX);
+      const wx = clamp(srcX - x0, 0, 1);
+      const dstIdx = (y * targetWidth + x) * 4;
+
+      for (let channel = 0; channel < 4; channel += 1) {
+        const topLeft = image.data[(y0 * image.width + x0) * 4 + channel] ?? 0;
+        const topRight = image.data[(y0 * image.width + x1) * 4 + channel] ?? 0;
+        const bottomLeft = image.data[(y1 * image.width + x0) * 4 + channel] ?? 0;
+        const bottomRight = image.data[(y1 * image.width + x1) * 4 + channel] ?? 0;
+
+        const top = topLeft * (1 - wx) + topRight * wx;
+        const bottom = bottomLeft * (1 - wx) + bottomRight * wx;
+        resized[dstIdx + channel] = Math.round(top * (1 - wy) + bottom * wy);
+      }
+    }
+  }
+
+  return resized;
+}
+
+function resizeImage(
+  image: DecodedImage,
+  targetWidth: number,
+  targetHeight: number,
+  interpolation: ResizeInterpolation,
+): DecodedImage {
+  if (image.width === targetWidth && image.height === targetHeight) {
+    return image;
+  }
+
+  const data =
+    interpolation === "nearest"
+      ? resizeNearest(image, targetWidth, targetHeight)
+      : resizeBilinear(image, targetWidth, targetHeight);
+
+  return {
+    width: targetWidth,
+    height: targetHeight,
+    data,
+    format: image.format,
+  };
+}
+
 export function compareImages(options: ImageCompareOptions): ImageCompareResult {
   const actual = readImageFromPath(options.actualImagePath);
   const reference = readImageFromPath(options.referenceImagePath);
+  const originalReferenceWidth = reference.image.width;
+  const originalReferenceHeight = reference.image.height;
+
+  let normalizedReference = reference.image;
+  let resizeApplied = false;
 
   if (actual.image.width !== reference.image.width || actual.image.height !== reference.image.height) {
-    throw new ImageCompareError("IMAGE_DIMENSION_MISMATCH", "Image dimensions must match for comparison", {
-      statusCode: 422,
-      details: {
-        actual: { width: actual.image.width, height: actual.image.height },
-        reference: { width: reference.image.width, height: reference.image.height },
-      },
-    });
+    if (options.dimensionPolicy === "resize-reference-to-actual") {
+      normalizedReference = resizeImage(
+        reference.image,
+        actual.image.width,
+        actual.image.height,
+        options.resizeInterpolation,
+      );
+      resizeApplied = true;
+    } else {
+      throw new ImageCompareError("IMAGE_DIMENSION_MISMATCH", "Image dimensions must match for comparison", {
+        statusCode: 422,
+        details: {
+          actual: { width: actual.image.width, height: actual.image.height },
+          reference: { width: reference.image.width, height: reference.image.height },
+        },
+      });
+    }
   }
 
   const width = actual.image.width;
@@ -172,9 +273,9 @@ export function compareImages(options: ImageCompareOptions): ImageCompareResult 
     const ab = actual.image.data[idx + 2] ?? 0;
     const aa = actual.image.data[idx + 3] ?? 255;
 
-    const rr = reference.image.data[idx] ?? 0;
-    const rg = reference.image.data[idx + 1] ?? 0;
-    const rb = reference.image.data[idx + 2] ?? 0;
+    const rr = normalizedReference.data[idx] ?? 0;
+    const rg = normalizedReference.data[idx + 1] ?? 0;
+    const rb = normalizedReference.data[idx + 2] ?? 0;
 
     const dr = Math.abs(ar - rr);
     const dg = Math.abs(ag - rg);
@@ -210,9 +311,12 @@ export function compareImages(options: ImageCompareOptions): ImageCompareResult 
       percentDiffPixels,
       maeRgb,
       maeLuminance,
+      resizeApplied,
+      originalReferenceWidth,
+      originalReferenceHeight,
     },
     actualPng: encodePng(width, height, actual.image.data),
-    referencePng: encodePng(width, height, reference.image.data),
+    referencePng: encodePng(width, height, normalizedReference.data),
     diffPng: options.writeDiff ? encodePng(width, height, diffData) : null,
   };
 }

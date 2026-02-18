@@ -44,7 +44,8 @@ async function main(): Promise<void> {
   });
 
   process.on("unhandledRejection", (reason) => {
-    void shutdown(1, "unhandledRejection", reason);
+    appendFatalLog(fatalLogPath, "unhandledRejection", reason);
+    console.error("[browser-debug-agent] unhandledRejection:", reason);
   });
 
   await runtime.start();

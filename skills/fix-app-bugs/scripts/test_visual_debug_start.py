@@ -200,12 +200,17 @@ def main() -> int:
         assert completed.returncode == 0, completed
         assert payload["exitCode"] == 0, payload
         assert payload["mode"] == "terminal-probe", payload
+        assert payload["modeSelection"]["selectedMode"] == "Enhanced mode (fix-app-bugs optional addon)", payload
         assert payload["scenarioProfile"] == "baseline", payload
         assert payload["appUrlStatus"] == "match", payload
+        assert payload["bootstrapConfigChanges"]["appliedRecommendations"] is False, payload
         assert payload["readiness"]["finalReady"] is True, payload
         assert payload["recovery"]["attempted"] is False, payload
         assert isinstance(payload.get("terminalProbe"), dict), payload
         assert payload["terminalProbe"]["exitCode"] == 0, payload
+        assert "--tab-url-match-strategy" in payload["terminalProbe"]["command"], payload
+        strategy_index = payload["terminalProbe"]["command"].index("--tab-url-match-strategy")
+        assert payload["terminalProbe"]["command"][strategy_index + 1] == "origin-path", payload
         assert any("summary" in item for item in payload.get("nextActions", [])), payload
 
         completed_plan_mode, payload_plan_mode = run_case(
@@ -231,6 +236,7 @@ def main() -> int:
         command_args = payload_drag_profile["terminalProbe"]["command"]
         assert "--force-new-session" in command_args, payload_drag_profile
         assert "--open-tab-if-missing" in command_args, payload_drag_profile
+        assert "--tab-url-match-strategy" in command_args, payload_drag_profile
 
         completed_terminal_headed, payload_terminal_headed = run_case(
             project_root,
@@ -461,6 +467,7 @@ def main() -> int:
         assert any(item.startswith("GET /health") for item in calls), calls
         assert any(item.startswith("POST /session/stop") for item in calls), calls
         assert any(item.startswith("POST /session/ensure") for item in calls), calls
+        assert any('"matchStrategy": "origin-path"' in item for item in calls if item.startswith("POST /session/ensure")), calls
         recovery_counter = int((bootstrap_recovery_success.with_suffix(".count")).read_text(encoding="utf-8").strip())
         assert recovery_counter == 2, recovery_counter
 

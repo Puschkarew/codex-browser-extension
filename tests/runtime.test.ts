@@ -394,6 +394,18 @@ describe("AgentRuntime APIs", () => {
     expect(json.error.code).toBe("DOMAIN_NOT_ALLOWED");
   });
 
+  it("validates matchStrategy on session ensure", async () => {
+    const { response, json } = await postJson(`${ctx.coreUrl}/session/ensure`, {
+      tabUrl: "http://localhost:3000/page",
+      debugPort: 9222,
+      reuseActive: true,
+      matchStrategy: "bad-strategy",
+    });
+
+    expect(response.status).toBe(422);
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+  });
+
   it("runs compare-reference command and writes standardized artifact bundle", async () => {
     const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference");
     fs.mkdirSync(fixturesDir, { recursive: true });
@@ -420,6 +432,9 @@ describe("AgentRuntime APIs", () => {
     expect(json.result.metrics.diffPixels).toBe(1);
     expect(json.result.metrics.totalPixels).toBe(4);
     expect(json.result.metrics.percentDiffPixels).toBe(25);
+    expect(json.result.metrics.resizeApplied).toBe(false);
+    expect(json.result.metrics.originalReferenceWidth).toBe(2);
+    expect(json.result.metrics.originalReferenceHeight).toBe(2);
 
     const runtimeJsonPath = String(json.result.artifacts.runtimeJsonPath);
     const metricsJsonPath = String(json.result.artifacts.metricsJsonPath);
@@ -439,10 +454,43 @@ describe("AgentRuntime APIs", () => {
       width: number;
       height: number;
       diffPixels: number;
+      resizeApplied: boolean;
+      originalReferenceWidth: number;
+      originalReferenceHeight: number;
     };
     expect(metricsPayload.width).toBe(2);
     expect(metricsPayload.height).toBe(2);
     expect(metricsPayload.diffPixels).toBe(1);
+    expect(metricsPayload.resizeApplied).toBe(false);
+    expect(metricsPayload.originalReferenceWidth).toBe(2);
+    expect(metricsPayload.originalReferenceHeight).toBe(2);
+  });
+
+  it("supports compare-reference resize policy for dimension mismatches", async () => {
+    const fixturesDir = path.join(ctx.tempDir, "fixtures", "compare-reference-resize");
+    fs.mkdirSync(fixturesDir, { recursive: true });
+
+    const actualPath = path.join(fixturesDir, "actual.png");
+    const referencePath = path.join(fixturesDir, "reference-small.png");
+    writePng(actualPath, 2, 2, () => [255, 255, 255, 255]);
+    writePng(referencePath, 1, 1, () => [255, 255, 255, 255]);
+
+    const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+      sessionId: "compare-reference-session",
+      command: "compare-reference",
+      payload: {
+        actualImagePath: actualPath,
+        referenceImagePath: referencePath,
+        dimensionPolicy: "resize-reference-to-actual",
+        resizeInterpolation: "nearest",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.result.metrics.resizeApplied).toBe(true);
+    expect(json.result.metrics.originalReferenceWidth).toBe(1);
+    expect(json.result.metrics.originalReferenceHeight).toBe(1);
   });
 
   it("runs compare-reference command without explicit sessionId", async () => {

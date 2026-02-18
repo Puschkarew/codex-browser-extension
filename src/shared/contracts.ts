@@ -87,15 +87,23 @@ export const DebugTraceBatchSchema = z.object({
   sessionId: z.string().optional(),
 });
 
+export const SessionMatchStrategySchema = z.enum([
+  "exact",
+  "origin-path",
+  "origin",
+]);
+
 export const SessionStartRequestSchema = z.object({
   tabUrl: z.string().min(1),
   debugPort: z.number().int().positive().default(9222),
+  matchStrategy: SessionMatchStrategySchema.default("exact"),
 });
 
 export const SessionEnsureRequestSchema = z.object({
   tabUrl: z.string().min(1),
   debugPort: z.number().int().positive().default(9222),
   reuseActive: z.boolean().default(true),
+  matchStrategy: SessionMatchStrategySchema.default("exact"),
 });
 
 export const SessionStopRequestSchema = z.object({
@@ -153,11 +161,23 @@ export const SnapshotPayloadSchema = z.object({
   timeoutMs: z.number().int().positive().default(20000),
 });
 
+export const CompareDimensionPolicySchema = z.enum([
+  "strict",
+  "resize-reference-to-actual",
+]);
+
+export const ResizeInterpolationSchema = z.enum([
+  "nearest",
+  "bilinear",
+]);
+
 export const CompareReferencePayloadSchema = z.object({
   actualImagePath: z.string().min(1),
   referenceImagePath: z.string().min(1),
   label: z.string().min(1).optional(),
   writeDiff: z.boolean().default(true),
+  dimensionPolicy: CompareDimensionPolicySchema.default("strict"),
+  resizeInterpolation: ResizeInterpolationSchema.default("bilinear"),
 });
 
 export const WebglDiagnosticsPayloadSchema = z.object({
@@ -226,6 +246,9 @@ export type NetworkAllowlistRule = z.infer<typeof NetworkAllowlistRuleSchema>;
 export type CompareReferencePayload = z.infer<typeof CompareReferencePayloadSchema>;
 export type WebglDiagnosticsPayload = z.infer<typeof WebglDiagnosticsPayloadSchema>;
 export type SessionEnsureRequest = z.infer<typeof SessionEnsureRequestSchema>;
+export type SessionMatchStrategy = z.infer<typeof SessionMatchStrategySchema>;
+export type CompareDimensionPolicy = z.infer<typeof CompareDimensionPolicySchema>;
+export type ResizeInterpolation = z.infer<typeof ResizeInterpolationSchema>;
 export type WaitPayload = z.infer<typeof WaitPayloadSchema>;
 export type NavigatePayload = z.infer<typeof NavigatePayloadSchema>;
 export type EvaluatePayload = z.infer<typeof EvaluatePayloadSchema>;

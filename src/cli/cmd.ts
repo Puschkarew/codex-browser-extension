@@ -8,7 +8,7 @@ type CommandResponse = {
 
 function usage(): never {
   throw new Error(
-    "Usage: npm run agent:cmd -- --do <reload|wait|navigate|evaluate|click|type|snapshot|compare-reference|webgl-diagnostics> [--session <id>] [--ms <value>] [--url <value>] [--expr <js>] [--selector <css>] [--text <value>] [--clear] [--timeout <ms>] [--fullPage] [--actual <path>] [--reference <path>] [--label <name>] [--noDiff] [--no-await-promise] [--no-return-by-value]",
+    "Usage: npm run agent:cmd -- --do <reload|wait|navigate|evaluate|click|type|snapshot|compare-reference|webgl-diagnostics> [--session <id>] [--ms <value>] [--url <value>] [--expr <js>] [--selector <css>] [--text <value>] [--clear] [--timeout <ms>] [--fullPage] [--actual <path>] [--reference <path>] [--label <name>] [--dimension-policy <strict|resize-reference-to-actual>] [--resize-interpolation <nearest|bilinear>] [--noDiff] [--no-await-promise] [--no-return-by-value]",
   );
 }
 
@@ -78,8 +78,16 @@ async function main(): Promise<void> {
     const actualImagePath = getArg("--actual");
     const referenceImagePath = getArg("--reference");
     const label = getArg("--label");
+    const dimensionPolicy = getArg("--dimension-policy") ?? "strict";
+    const resizeInterpolation = getArg("--resize-interpolation") ?? "bilinear";
 
     if (!actualImagePath || !referenceImagePath) {
+      usage();
+    }
+    if (!["strict", "resize-reference-to-actual"].includes(dimensionPolicy)) {
+      usage();
+    }
+    if (!["nearest", "bilinear"].includes(resizeInterpolation)) {
       usage();
     }
 
@@ -88,6 +96,8 @@ async function main(): Promise<void> {
       referenceImagePath,
       ...(label ? { label } : {}),
       writeDiff: !hasFlag("--noDiff"),
+      dimensionPolicy,
+      resizeInterpolation,
     };
   } else if (command === "webgl-diagnostics") {
     payload = { ...(timeoutMs ? { timeoutMs } : {}) };

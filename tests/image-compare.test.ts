@@ -54,6 +54,8 @@ describe("compareImages", () => {
       actualImagePath: actualPath,
       referenceImagePath: referencePath,
       writeDiff: true,
+      dimensionPolicy: "strict",
+      resizeInterpolation: "bilinear",
     });
 
     expect(result.metrics.maeRgb).toBe(0);
@@ -75,6 +77,8 @@ describe("compareImages", () => {
       actualImagePath: actualPath,
       referenceImagePath: referencePath,
       writeDiff: true,
+      dimensionPolicy: "strict",
+      resizeInterpolation: "bilinear",
     });
 
     expect(result.metrics.maeRgb).toBeGreaterThan(0);
@@ -97,6 +101,8 @@ describe("compareImages", () => {
         actualImagePath: actualPath,
         referenceImagePath: referencePath,
         writeDiff: true,
+        dimensionPolicy: "strict",
+        resizeInterpolation: "bilinear",
       }),
     ).toThrowError(ImageCompareError);
 
@@ -105,10 +111,35 @@ describe("compareImages", () => {
         actualImagePath: actualPath,
         referenceImagePath: referencePath,
         writeDiff: true,
+        dimensionPolicy: "strict",
+        resizeInterpolation: "bilinear",
       });
     } catch (error) {
       expect(error).toBeInstanceOf(ImageCompareError);
       expect((error as ImageCompareError).code).toBe("IMAGE_DIMENSION_MISMATCH");
     }
+  });
+
+  it("auto-resizes reference image when dimension policy is resize-reference-to-actual", () => {
+    const root = createTempDir();
+    const actualPath = path.join(root, "actual.png");
+    const referencePath = path.join(root, "reference.png");
+
+    writePng(actualPath, 2, 2, (x, y) => (x === y ? [255, 255, 255, 255] : [0, 0, 0, 255]));
+    writePng(referencePath, 1, 1, () => [255, 255, 255, 255]);
+
+    const result = compareImages({
+      actualImagePath: actualPath,
+      referenceImagePath: referencePath,
+      writeDiff: true,
+      dimensionPolicy: "resize-reference-to-actual",
+      resizeInterpolation: "nearest",
+    });
+
+    expect(result.metrics.width).toBe(2);
+    expect(result.metrics.height).toBe(2);
+    expect(result.metrics.resizeApplied).toBe(true);
+    expect(result.metrics.originalReferenceWidth).toBe(1);
+    expect(result.metrics.originalReferenceHeight).toBe(1);
   });
 });
