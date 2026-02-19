@@ -57,7 +57,7 @@ Optional quick-start helper for visual tasks:
 `python3 "$FIX_APP_BUGS_ROOT/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json`
 This helper runs guarded bootstrap, validates app-url status, optionally runs minimal terminal-probe capture, and prints next actions.
 Exit code contract: non-zero when guarded bootstrap fails, or when terminal-probe capture is executed and fails.
-The helper logs `modeSelection` and `bootstrapConfigChanges` (`appliedRecommendations`, `recommendedDiffDigest`) in JSON output.
+The helper logs `modeSelection` (including alternate mode rationale), `bootstrapConfigChanges` (`appliedRecommendations`, `recommendedDiffDigest`), and `terminalProbeNextAction` in JSON output when available.
 
 Run:
 `python3 "$FIX_APP_BUGS_ROOT/scripts/bootstrap_guarded.py" --project-root <project-root> --json`
@@ -126,7 +126,8 @@ For render bugs (diagonal split, half-screen black, invisible simulation), prefe
 Use a project-specific scenario file (ON/OFF/paused) derived from the example.
 You can still pass explicit `--session-id <id>` when needed.
 For auto session robustness, prefer:
-`--tab-url-match-strategy origin-path` and keep at most one retry fallback (`--open-tab-if-missing`).
+`--tab-url-match-strategy origin-path`; keep `--open-tab-if-missing` enabled in auto mode (default) unless you explicitly need `--no-open-tab-if-missing`.
+Pipeline JSON emits deterministic `nextAction` guidance and canonical `blackScreenVerdict` for closure evidence.
 For parity resilience, keep strict-first compare and allow fallback resize only once via default policy (`dimensionPolicy=strict` then `resize-reference-to-actual`).
 
 3. Ask user to reproduce.

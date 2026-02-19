@@ -154,6 +154,7 @@ npm run agent:query -- --from <ISO> --to <ISO> --tag <tag>
 ```bash
 npm run agent:feedback -- --window 24h --targets browser-debug,fix-app-bugs
 ```
+  - JSON contract includes structured `signals`, per-signal `promotion`, report-level `promotionRules`, and `backlogSlice` (promoted signals only).
 - Execute browser command:
 ```bash
 npm run agent:cmd -- --session <id> --do reload
@@ -182,12 +183,14 @@ bash "$CODEX_HOME/skills/fix-app-bugs/scripts/cleanup_guarded.sh" .
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
-  - Optional reliability flags for `--session-id auto`: `--tab-url-match-strategy origin-path`, `--force-new-session`, `--open-tab-if-missing`.
+  - Optional reliability flags for `--session-id auto`: `--tab-url-match-strategy origin-path`, `--force-new-session`, `--open-tab-if-missing` (default enabled), `--no-open-tab-if-missing`.
+  - JSON output includes deterministic `nextAction` guidance and canonical `blackScreenVerdict`.
 - Visual starter helper:
 ```bash
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --project-root <project-root> --actual-app-url <url> --json
 ```
-  - Optional strict-readiness helper flags: `--auto-recover-session`, `--headed-evidence`, `--reference-image <path>`, `--evidence-label <label>`.
+  - Optional strict-readiness helper flags: `--auto-recover-session`, `--no-open-tab-if-missing`, `--headed-evidence`, `--reference-image <path>`, `--evidence-label <label>`.
+  - Recovery precedence: `app-url-gate:*` first (`preview -> apply -> resume`), then `session-state:*|cdp-unavailable:*` (`soft recovery -> force-new-session -> open-tab-if-missing`).
 
 ## Notes for Contributors
 - Keep commands aligned with `package.json` scripts and current API contracts.

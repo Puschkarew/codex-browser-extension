@@ -143,7 +143,7 @@ These commands are valid in both modes:
 - Execute a browser command: `npm run agent:cmd -- --session <id> --do <reload|click|type|snapshot|compare-reference|webgl-diagnostics>`
 - Capture one parity bundle: `npm run agent:parity-bundle -- --session <id> --reference /path/ref.png --label baseline`
 - Query logs: `npm run agent:query -- --from <ISO> --to <ISO> [--tag <tag>]`
-- Aggregate 24h agent feedback: `npm run agent:feedback -- --window 24h [--targets browser-debug,fix-app-bugs]`
+- Aggregate 24h agent feedback: `npm run agent:feedback -- --window 24h [--targets browser-debug,fix-app-bugs]` (`--json` now includes structured `signals`, per-signal `promotion`, `promotionRules`, and `backlogSlice` with promoted signals only).
 - Run tests: `npm test`
 
 Examples:
@@ -163,10 +163,12 @@ Enhanced fallback helper (terminal-probe scenario pipeline):
 python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --project-root <project-root> --session-id <id> --scenarios "$CODEX_HOME/skills/fix-app-bugs/references/terminal-probe-scenarios.example.json" --json
 ```
 This helper captures scenario snapshots, computes metrics (`mean`, `stddev`, `nonBlackRatio`, `MAE`), and writes `runtime.json`, `metrics.json`, `summary.json`.
+It also emits deterministic `nextAction` guidance and canonical `blackScreenVerdict` in top-level JSON and in `summary.json`.
 Optional reliability flags for auto session flows:
 - `--tab-url-match-strategy origin-path`: match by origin+path first, then retry with exact URL when CDP list resolves a unique candidate.
 - `--force-new-session`: stop active session before `session/ensure`.
-- `--open-tab-if-missing`: attempt CDP `json/new` on `TARGET_NOT_FOUND` and retry ensure.
+- `--open-tab-if-missing`: attempt CDP `json/new` on `TARGET_NOT_FOUND` and retry ensure (enabled by default in auto mode).
+- `--no-open-tab-if-missing`: disable automatic tab-open recovery.
 - `--resize-interpolation nearest|bilinear`: interpolation mode for `resize-reference-to-actual` fallback.
 - `--no-normalize-reference-size`: keep strict dimension policy only.
 
@@ -177,9 +179,18 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --projec
 Optional flags:
 - `--auto-recover-session`: one bounded `/health -> /session/stop -> /session/ensure` recovery attempt on `cdp-unavailable:*` or `session-state:*`.
 - `--tab-url-match-strategy exact|origin-path|origin`: matching strategy for recovery ensure + terminal-probe auto session.
+- `--open-tab-if-missing`: keep automatic tab-open recovery enabled for terminal-probe auto-session flows (default).
+- `--no-open-tab-if-missing`: explicitly disable auto tab-open recovery for terminal-probe auto-session flows.
 - `--headed-evidence`: generate headed evidence bundle.
 - `--reference-image <path>`: required with `--headed-evidence` in `browser-fetch`.
 - `--evidence-label <label>`: parity bundle label (default `visual-debug-start`).
+
+`visual_debug_start.py --json` output also exposes `modeSelection.alternateMode`, `modeSelection.alternateModeRationale`, and `terminalProbeNextAction` when terminal-probe capture returns deterministic follow-up guidance.
+
+Recovery precedence for readiness failures:
+1. `app-url-gate:*`: run config alignment commands first (`preview -> apply -> resume`).
+2. `session-state:*` or `cdp-unavailable:*`: use guided session lane (`soft recovery -> force-new-session -> open-tab-if-missing`).
+3. If still blocked, keep terminal-probe mode and inspect `readinessReasons` before rerun.
 
 ## HTTP APIs
 Default base URLs:
@@ -188,7 +199,7 @@ Default base URLs:
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/health` | `GET` | Agent status, active session, readiness (including CDP probe), and `appUrlDrift` hint vs active tab URL. |
+| `/health` | `GET` | Agent status, active session, readiness (including CDP probe), `appUrlDrift`, and `runReadiness` verdict (`runnable|fallback|blocked`) with next action hints. |
 | `/runtime/config` | `GET`, `POST` | Read or update active runtime config. |
 | `/session/start` | `POST` | Start session and attach to tab via CDP (`matchStrategy`: `exact|origin-path|origin`, default `exact`). |
 | `/session/ensure` | `POST` | Ensure/reuse session (`matchStrategy`: `exact|origin-path|origin`, default `exact`; non-exact ambiguity returns `409 AMBIGUOUS_TARGET`). |
@@ -215,6 +226,8 @@ Mode note: API surface stays the same in both modes; Enhanced mode imposes stric
 - `browserInstrumentation.failureCategory = network-mismatch-only`: apply first `checks.appUrl.recommendedCommands` entry with `--apply-recommended`.
 - `browserInstrumentation.failureCategory = endpoint-unavailable`: verify agent health and endpoint reachability before retrying browser-fetch.
 - `/health.appUrlDrift.status = mismatch`: use `/health.appUrlDrift.recommendedCommand` as a template and replace `<project-root>` with your target app repository path.
+- `/health.runReadiness.status = fallback`: follow `/health.runReadiness.nextAction` and continue with terminal-probe starter path.
+- `/health.runReadiness.status = blocked`: execute `/health.runReadiness.nextAction.command` first, then re-check `/health`.
 - Missing `fix-app-bugs` tooling is not a blocker for Core mode; run Core workflow directly.
 
 ## Skill Sync Workflow

@@ -82,6 +82,7 @@ npm run agent:start
 4. `readiness.cdpReason`: probe error when unavailable.
 5. `readiness.cdpPort`: active runtime CDP port.
 6. `appUrlDrift`: config-vs-active-tab drift hint with a `recommendedCommand` template (`--project-root <project-root>`) when mismatch is detected.
+7. `runReadiness`: canonical run verdict (`runnable`, `fallback`, `blocked`) with `modeHint`, `reasons`, and optional `nextAction`.
 
 ## Enhanced Mode Compatibility (fix-app-bugs)
 
@@ -164,8 +165,11 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/visual_debug_start.py" --projec
 
 Exit code contract: returns non-zero when guarded bootstrap fails, strict readiness gate remains false (`readyForScenarioRun=false` outside plan mode), headed-evidence fails, or terminal-probe capture is executed and fails.
 JSON output includes:
-1. `modeSelection` (`selectedMode`, `executionMode`, `reason`)
+1. `modeSelection` (`selectedMode`, `executionMode`, `reason`, `alternateMode`, `alternateModeRationale`)
 2. `bootstrapConfigChanges` (`appliedRecommendations`, `recommendedDiffDigest`)
+3. `readinessVerdict` (`status`, `modeHint`, `reasons`, `summary`, `nextAction`)
+4. `recoveryLane` (`class`, `reason`, ordered `actions`, `primaryAction`)
+5. `terminalProbeNextAction` (mirrors terminal-probe `nextAction` when capture reports a deterministic recovery command)
 
 If Enhanced prerequisites are unavailable, continue in `Core mode` from [README.md](README.md).
 
@@ -213,6 +217,11 @@ CLI:
 npm run agent:query -- --from 2026-02-06T12:00:00.000Z --to 2026-02-06T12:30:00.000Z --tag checkout-submit
 ```
 
+Cross-project feedback triage (structured signals + backlog slice):
+```bash
+npm run agent:feedback -- --window 24h --targets browser-debug,fix-app-bugs --json
+```
+
 Correlation strategy:
 1. Primary key: `traceId`
 2. Secondary: `tag`
@@ -245,11 +254,17 @@ python3 "$CODEX_HOME/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py" --p
 Optional reliability flags:
 - `--tab-url-match-strategy origin-path` for query/hash-tolerant auto-session resolution with exact retry on unique CDP match.
 - `--force-new-session` to stop an active session before `session/ensure`.
-- `--open-tab-if-missing` to call CDP `json/new` on `TARGET_NOT_FOUND` and retry `session/ensure`.
+- `--open-tab-if-missing` to call CDP `json/new` on `TARGET_NOT_FOUND` and retry `session/ensure` (enabled by default in auto mode).
+- `--no-open-tab-if-missing` to disable automatic tab-open recovery in auto mode.
 - `--resize-interpolation nearest|bilinear` to control reference resize interpolation.
 - `--no-normalize-reference-size` to disable strict->resize fallback for dimension mismatch.
 - `visual_debug_start.py --auto-recover-session` to run one bounded `/health -> /session/stop -> /session/ensure` recovery attempt before re-running bootstrap.
 - `visual_debug_start.py --headed-evidence` to produce headed evidence bundle (`--reference-image` required in `browser-fetch`; terminal-probe reuses existing bundle paths).
+
+Recovery precedence (deterministic):
+1. `app-url-gate:*` -> config alignment (`preview -> apply -> resume`).
+2. `session-state:*` or `cdp-unavailable:*` -> session/CDP lane (`soft recovery -> force-new-session -> open-tab-if-missing`).
+3. If still blocked, stop scenario launch and inspect `readinessReasons` + `recoveryLane` before retrying.
 
 Customize the scenario file with real ON/OFF/paused selectors for your app.
 
