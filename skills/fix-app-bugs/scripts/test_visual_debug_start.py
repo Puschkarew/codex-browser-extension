@@ -201,17 +201,33 @@ def main() -> int:
         assert payload["exitCode"] == 0, payload
         assert payload["mode"] == "terminal-probe", payload
         assert payload["modeSelection"]["selectedMode"] == "Enhanced mode (fix-app-bugs optional addon)", payload
+        assert payload["modeSelection"]["alternateMode"] == "browser-fetch", payload
+        assert isinstance(payload["modeSelection"]["alternateModeRationale"], str), payload
         assert payload["scenarioProfile"] == "baseline", payload
         assert payload["appUrlStatus"] == "match", payload
         assert payload["bootstrapConfigChanges"]["appliedRecommendations"] is False, payload
         assert payload["readiness"]["finalReady"] is True, payload
+        assert payload["readinessVerdict"]["status"] == "fallback", payload
+        assert payload["readinessVerdict"]["modeHint"] == "terminal-probe", payload
+        assert payload["recoveryLane"]["class"] == "none", payload
         assert payload["recovery"]["attempted"] is False, payload
         assert isinstance(payload.get("terminalProbe"), dict), payload
         assert payload["terminalProbe"]["exitCode"] == 0, payload
         assert "--tab-url-match-strategy" in payload["terminalProbe"]["command"], payload
         strategy_index = payload["terminalProbe"]["command"].index("--tab-url-match-strategy")
         assert payload["terminalProbe"]["command"][strategy_index + 1] == "origin-path", payload
+        assert "--open-tab-if-missing" in payload["terminalProbe"]["command"], payload
         assert any("summary" in item for item in payload.get("nextActions", [])), payload
+
+        completed_open_tab_disabled, payload_open_tab_disabled = run_case(
+            project_root,
+            bootstrap_terminal_probe,
+            terminal_probe_ok,
+            extra_args=["--no-open-tab-if-missing"],
+        )
+        assert completed_open_tab_disabled.returncode == 0, completed_open_tab_disabled
+        assert isinstance(payload_open_tab_disabled.get("terminalProbe"), dict), payload_open_tab_disabled
+        assert "--no-open-tab-if-missing" in payload_open_tab_disabled["terminalProbe"]["command"], payload_open_tab_disabled
 
         completed_plan_mode, payload_plan_mode = run_case(
             project_root,
@@ -283,6 +299,7 @@ def main() -> int:
         assert completed_mismatch.returncode == 1, completed_mismatch
         assert payload_mismatch["exitCode"] == 1, payload_mismatch
         assert payload_mismatch["mode"] == "browser-fetch", payload_mismatch
+        assert payload_mismatch["modeSelection"]["alternateMode"] == "terminal-probe", payload_mismatch
         assert payload_mismatch["appUrlStatus"] == "mismatch", payload_mismatch
         assert payload_mismatch["terminalProbe"] is None, payload_mismatch
         assert isinstance(payload_mismatch.get("configAlignment"), dict), payload_mismatch
@@ -291,6 +308,10 @@ def main() -> int:
         assert payload_mismatch["checks"]["reasonCode"] == "APP_URL_ORIGIN_MISMATCH", payload_mismatch
         assert payload_mismatch["readiness"]["finalReady"] is False, payload_mismatch
         assert "app-url-gate:mismatch" in payload_mismatch["readiness"]["finalReasons"], payload_mismatch
+        assert payload_mismatch["readinessVerdict"]["status"] == "blocked", payload_mismatch
+        assert payload_mismatch["recoveryLane"]["class"] == "config-alignment", payload_mismatch
+        assert payload_mismatch["recoveryLane"]["actions"][0]["id"] == "preview-config-fix", payload_mismatch
+        assert payload_mismatch["nextActions"][0].startswith("Preview config fix: "), payload_mismatch
 
         bootstrap_browser_fetch_ready = root / "bootstrap_browser_fetch_ready.py"
         write_executable(
@@ -401,7 +422,12 @@ def main() -> int:
             terminal_probe_fails,
             "#!/usr/bin/env python3\n"
             "import json\n"
-            "print(json.dumps({'ok': False, 'summaryJsonPath': None}))\n"
+            "print(json.dumps({'ok': False, 'summaryJsonPath': None, 'nextAction': {\n"
+            "  'id': 'recover-cdp-session',\n"
+            "  'label': 'Recover CDP and session',\n"
+            "  'reason': 'CDP endpoint/session channel is unavailable.',\n"
+            "  'command': 'python3 visual_debug_start.py --auto-recover-session --json'\n"
+            "}}))\n"
             "raise SystemExit(3)\n",
         )
 
@@ -415,6 +441,9 @@ def main() -> int:
         assert payload_probe_fail["bootstrap"]["exitCode"] == 0, payload_probe_fail
         assert isinstance(payload_probe_fail["terminalProbe"], dict), payload_probe_fail
         assert payload_probe_fail["terminalProbe"]["exitCode"] == 3, payload_probe_fail
+        assert isinstance(payload_probe_fail.get("terminalProbeNextAction"), dict), payload_probe_fail
+        assert payload_probe_fail["terminalProbeNextAction"]["id"] == "recover-cdp-session", payload_probe_fail
+        assert any("Terminal-probe next action" in item for item in payload_probe_fail.get("nextActions", [])), payload_probe_fail
 
         recovery_false_payload = {
             "browserInstrumentation": {
@@ -482,6 +511,11 @@ def main() -> int:
         assert completed_no_recovery.returncode == 1, completed_no_recovery
         assert payload_no_recovery["recovery"]["attempted"] is False, payload_no_recovery
         assert payload_no_recovery["readiness"]["finalReady"] is False, payload_no_recovery
+        assert payload_no_recovery["recoveryLane"]["class"] == "session-cdp-recovery", payload_no_recovery
+        assert payload_no_recovery["recoveryLane"]["actions"][0]["id"] == "soft-recovery", payload_no_recovery
+        assert payload_no_recovery["recoveryLane"]["actions"][1]["id"] == "force-new-session", payload_no_recovery
+        assert payload_no_recovery["recoveryLane"]["actions"][2]["id"] == "open-tab-recovery", payload_no_recovery
+        assert payload_no_recovery["nextActions"][0].startswith("Soft session recovery: "), payload_no_recovery
         no_recovery_counter = int((bootstrap_recovery_without_flag.with_suffix(".count")).read_text(encoding="utf-8").strip())
         assert no_recovery_counter == 1, no_recovery_counter
 
@@ -515,6 +549,7 @@ def main() -> int:
         assert payload_blocked["recovery"]["attempted"] is True, payload_blocked
         assert payload_blocked["recovery"]["result"] == "success", payload_blocked
         assert payload_blocked["readiness"]["finalReady"] is False, payload_blocked
+        assert payload_blocked["recoveryLane"]["class"] == "session-cdp-recovery", payload_blocked
         assert payload_blocked["terminalProbe"] is None, payload_blocked
 
     print("visual_debug_start smoke checks passed")

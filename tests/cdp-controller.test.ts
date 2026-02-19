@@ -13,6 +13,7 @@ function createFakeController(
     loadEventFired?: () => Promise<unknown>;
     navigate?: (params: { url: string }) => Promise<void>;
     reload?: () => Promise<void>;
+    evaluate?: () => Promise<FakeRuntimeValue>;
   } = {},
 ): CdpController {
   const controller = new CdpController();
@@ -32,7 +33,9 @@ function createFakeController(
     },
     Runtime: {
       enable: async () => undefined,
-      evaluate: async () => runtimeValue,
+      evaluate: options.evaluate
+        ? async () => options.evaluate?.()
+        : async () => runtimeValue,
     },
     DOM: {
       enable: async () => undefined,
@@ -82,6 +85,53 @@ describe("CdpController commands", () => {
     );
 
     await expect(controller.navigate("http://localhost:3000/page", 10)).rejects.toBeInstanceOf(CommandTimeoutError);
+  });
+
+  it("navigate falls back to document.readyState when loadEventFired is incompatible", async () => {
+    let evaluateCalls = 0;
+    const controller = createFakeController(
+      { result: { value: "complete" } },
+      {
+        loadEventFired: async () => {
+          throw new TypeError("client.Page.once is not a function");
+        },
+        evaluate: async () => {
+          evaluateCalls += 1;
+          return { result: { value: "complete" } };
+        },
+      },
+    );
+
+    await expect(controller.navigate("http://localhost:3000/page", 100)).resolves.toEqual({
+      ok: true,
+      url: "http://localhost:3000/page",
+    });
+    expect(evaluateCalls).toBeGreaterThan(0);
+  });
+
+  it("reload falls back to document.readyState when loadEventFired is missing", async () => {
+    let evaluateCalls = 0;
+    const controller = createFakeController(
+      { result: { value: "interactive" } },
+      {
+        evaluate: async () => {
+          evaluateCalls += 1;
+          return { result: { value: "interactive" } };
+        },
+      },
+    );
+
+    const fake = controller as unknown as {
+      connected: {
+        client: {
+          Page: { loadEventFired?: unknown };
+        };
+      };
+    };
+    delete fake.connected.client.Page.loadEventFired;
+
+    await expect(controller.reload(100)).resolves.toEqual({ ok: true });
+    expect(evaluateCalls).toBeGreaterThan(0);
   });
 
   it("returns evaluated diagnostics object when CDP connection is present", async () => {

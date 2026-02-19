@@ -31,6 +31,31 @@ SESSION_ENSURE_RETRY_LIMIT = 3
 DEFAULT_TAB_URL_MATCH_STRATEGY = "origin-path"
 DEFAULT_RESIZE_INTERPOLATION = "bilinear"
 
+PIPELINE_RETRY_BASE_COMMAND = (
+    "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" "
+    "--project-root <project-root> --session-id auto --tab-url <url> "
+    "--tab-url-match-strategy origin-path --scenarios <scenarios.json> --json"
+)
+PIPELINE_RETRY_FORCE_RECOVERY_COMMAND = f"{PIPELINE_RETRY_BASE_COMMAND} --force-new-session --open-tab-if-missing"
+PIPELINE_RETRY_EXACT_COMMAND = f"{PIPELINE_RETRY_BASE_COMMAND} --tab-url-match-strategy exact --no-open-tab-if-missing"
+PIPELINE_RETRY_TIMEOUT_COMMAND = f"{PIPELINE_RETRY_FORCE_RECOVERY_COMMAND} --timeout-ms 30000"
+SESSION_START_COMMAND = "npm run agent:session -- --tab-url <url> --match-strategy origin-path"
+SESSION_RESTART_COMMAND = f"npm run agent:stop && {SESSION_START_COMMAND}"
+VISUAL_START_RECOVERY_COMMAND = (
+    "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/visual_debug_start.py\" "
+    "--project-root <project-root> --actual-app-url <url> --auto-recover-session --json"
+)
+STALE_TRANSPORT_HINTS = [
+    "websocket",
+    "readystate 3",
+    "closed",
+    "target closed",
+    "session closed",
+    "cdp client is not attached",
+    "socket hang up",
+    "econnreset",
+]
+
 
 class SessionEnsureError(RuntimeError):
     def __init__(
@@ -45,6 +70,21 @@ class SessionEnsureError(RuntimeError):
         self.error_code = error_code
         self.error_message = error_message
         self.response_body_snippet = response_body_snippet
+
+
+class AutoSessionResolutionError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_category: Optional[str] = None,
+        error_code: Optional[str] = None,
+        lifecycle: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(message)
+        self.failure_category = failure_category
+        self.error_code = error_code
+        self.lifecycle = lifecycle
 
 
 def iso_now() -> str:
@@ -725,6 +765,11 @@ def resolve_auto_session(
         "openTabIfMissing": open_tab_if_missing,
         "tabUrlMatchStrategy": tab_url_match_strategy,
         "failureCategory": None,
+        "ensureAttempts": 0,
+        "firstEnsureAttemptSucceeded": False,
+        "fallbackUsed": False,
+        "fallbackActionsUsed": [],
+        "attachBranch": "direct-ensure",
         "actions": [],
     }
 
@@ -741,11 +786,20 @@ def resolve_auto_session(
             )
             if not bool(stop_result.get("ok")):
                 lifecycle["failureCategory"] = "session-stop-failed"
-                raise RuntimeError(
-                    "force-new-session failed: "
-                    f"status={stop_result.get('status')} "
-                    f"code={stop_result.get('errorCode')} "
-                    f"message={stop_result.get('errorMessage')}"
+                raise AutoSessionResolutionError(
+                    (
+                        "force-new-session failed: "
+                        f"status={stop_result.get('status')} "
+                        f"code={stop_result.get('errorCode')} "
+                        f"message={stop_result.get('errorMessage')}"
+                    ),
+                    failure_category="session-stop-failed",
+                    error_code=(
+                        str(stop_result.get("errorCode"))
+                        if isinstance(stop_result.get("errorCode"), str)
+                        else None
+                    ),
+                    lifecycle=lifecycle,
                 )
         else:
             lifecycle["actions"].append(
@@ -761,8 +815,36 @@ def resolve_auto_session(
 
     opened_tab_for_target_recovery = False
     resolved_exact_tab_url = False
+    fallback_actions_used: List[str] = []
+    attach_branch = "direct-ensure"
     current_tab_url = tab_url
+
+    # Preflight: when a unique target is already visible in CDP list, bind to exact URL
+    # before the first /session/ensure to reduce first-attempt TARGET_NOT_FOUND churn.
+    if tab_url_match_strategy != "exact":
+        preflight_resolved_tab = resolve_exact_tab_url_via_cdp(
+            tab_url=current_tab_url,
+            debug_port=debug_port,
+            match_strategy=tab_url_match_strategy,
+            timeout_seconds=timeout_seconds,
+        )
+        lifecycle["actions"].append(
+            {
+                "action": "preflight-resolve-target-from-cdp-list",
+                **preflight_resolved_tab,
+            }
+        )
+        if bool(preflight_resolved_tab.get("ok")) and isinstance(preflight_resolved_tab.get("resolvedTabUrl"), str):
+            current_tab_url = str(preflight_resolved_tab["resolvedTabUrl"])
+            tab_url_match_strategy = "exact"
+            resolved_exact_tab_url = True
+            attach_branch = "preflight-resolve-target-from-cdp-list"
+            if "preflight-resolve-target-from-cdp-list" not in fallback_actions_used:
+                fallback_actions_used.append("preflight-resolve-target-from-cdp-list")
+            lifecycle["fallbackUsed"] = True
+
     for attempt in range(1, SESSION_ENSURE_RETRY_LIMIT + 1):
+        lifecycle["ensureAttempts"] = attempt
         try:
             ensured = ensure_session(
                 core_base_url=core_base_url,
@@ -785,6 +867,10 @@ def resolve_auto_session(
                     "matchStrategy": tab_url_match_strategy,
                 }
             )
+            lifecycle["firstEnsureAttemptSucceeded"] = attempt == 1
+            lifecycle["fallbackUsed"] = bool(fallback_actions_used)
+            lifecycle["fallbackActionsUsed"] = list(fallback_actions_used)
+            lifecycle["attachBranch"] = attach_branch
             return {
                 "ensured": ensured,
                 "lifecycle": lifecycle,
@@ -826,14 +912,23 @@ def resolve_auto_session(
                     current_tab_url = str(resolved_tab["resolvedTabUrl"])
                     tab_url_match_strategy = "exact"
                     resolved_exact_tab_url = True
+                    attach_branch = "resolve-target-from-cdp-list"
+                    if "resolve-target-from-cdp-list" not in fallback_actions_used:
+                        fallback_actions_used.append("resolve-target-from-cdp-list")
+                    lifecycle["fallbackUsed"] = True
                     continue
                 if resolved_tab.get("errorCode") == "AMBIGUOUS_TARGET":
                     lifecycle["failureCategory"] = "ambiguous-target"
-                    raise RuntimeError(
-                        "session ensure failed: "
-                        f"status={exc.status} "
-                        f"code=AMBIGUOUS_TARGET "
-                        f"message={resolved_tab.get('errorMessage')}"
+                    raise AutoSessionResolutionError(
+                        (
+                            "session ensure failed: "
+                            f"status={exc.status} "
+                            f"code=AMBIGUOUS_TARGET "
+                            f"message={resolved_tab.get('errorMessage')}"
+                        ),
+                        failure_category="ambiguous-target",
+                        error_code="AMBIGUOUS_TARGET",
+                        lifecycle=lifecycle,
                     ) from exc
 
             if (
@@ -850,25 +945,65 @@ def resolve_auto_session(
                 )
                 if bool(open_tab_result.get("ok")):
                     opened_tab_for_target_recovery = True
+                    attach_branch = "open-tab-if-missing"
+                    if "open-tab-if-missing" not in fallback_actions_used:
+                        fallback_actions_used.append("open-tab-if-missing")
+                    lifecycle["fallbackUsed"] = True
                     continue
-                raise RuntimeError(
-                    "open-tab-if-missing failed: "
-                    f"status={open_tab_result.get('status')} "
-                    f"message={open_tab_result.get('errorMessage')}"
+                raise AutoSessionResolutionError(
+                    (
+                        "open-tab-if-missing failed: "
+                        f"status={open_tab_result.get('status')} "
+                        f"message={open_tab_result.get('errorMessage')}"
+                    ),
+                    failure_category="open-tab-failed",
+                    error_code=(
+                        str(open_tab_result.get("errorCode"))
+                        if isinstance(open_tab_result.get("errorCode"), str)
+                        else None
+                    ),
+                    lifecycle=lifecycle,
                 )
 
             if failure_category == "cdp-unavailable" and attempt < SESSION_ENSURE_RETRY_LIMIT:
-                time.sleep(0.4 * attempt)
+                backoff_seconds = round(0.4 * attempt, 2)
+                lifecycle["actions"].append(
+                    {
+                        "action": "retry-after-backoff",
+                        "attempt": attempt,
+                        "ok": True,
+                        "reason": "cdp-unavailable",
+                        "seconds": backoff_seconds,
+                    }
+                )
+                attach_branch = "retry-after-backoff"
+                if "retry-after-backoff" not in fallback_actions_used:
+                    fallback_actions_used.append("retry-after-backoff")
+                lifecycle["fallbackUsed"] = True
+                time.sleep(backoff_seconds)
                 continue
 
-            raise RuntimeError(
-                "session ensure failed: "
-                f"status={exc.status} "
-                f"code={exc.error_code} "
-                f"message={exc.error_message}"
+            raise AutoSessionResolutionError(
+                (
+                    "session ensure failed: "
+                    f"status={exc.status} "
+                    f"code={exc.error_code} "
+                    f"message={exc.error_message}"
+                ),
+                failure_category=failure_category,
+                error_code=exc.error_code,
+                lifecycle=lifecycle,
             ) from exc
 
-    raise RuntimeError("session ensure failed: retry limit exceeded")
+    raise AutoSessionResolutionError(
+        "session ensure failed: retry limit exceeded",
+        failure_category=(
+            str(lifecycle.get("failureCategory"))
+            if isinstance(lifecycle.get("failureCategory"), str)
+            else None
+        ),
+        lifecycle=lifecycle,
+    )
 
 
 def find_magick_binary() -> Optional[str]:
@@ -1089,6 +1224,223 @@ def classify_failure_bucket(runtime_entry: Dict[str, Any]) -> str:
     return "app"
 
 
+def is_stale_transport_error(
+    error_message: Optional[str],
+    response_body_snippet: Optional[str],
+) -> bool:
+    text = " ".join(
+        [
+            str(error_message or ""),
+            str(response_body_snippet or ""),
+        ]
+    ).lower()
+    return any(hint in text for hint in STALE_TRANSPORT_HINTS)
+
+
+def build_failure_next_action(
+    *,
+    source: str,
+    error_code: Optional[str] = None,
+    error_message: Optional[str] = None,
+    response_body_snippet: Optional[str] = None,
+    failure_category: Optional[str] = None,
+) -> Dict[str, Any]:
+    normalized_code = error_code.strip().upper() if isinstance(error_code, str) and error_code.strip() else None
+    normalized_category = (
+        failure_category.strip().lower()
+        if isinstance(failure_category, str) and failure_category.strip()
+        else None
+    )
+    stale_transport = is_stale_transport_error(error_message, response_body_snippet)
+
+    if normalized_category == "target-not-found" or normalized_code == "TARGET_NOT_FOUND":
+        return {
+            "id": "open-tab-recovery",
+            "label": "Open missing tab and retry",
+            "reason": "Target tab was not found while ensuring session.",
+            "command": PIPELINE_RETRY_FORCE_RECOVERY_COMMAND,
+            "source": source,
+        }
+
+    if normalized_category == "session-already-running" or normalized_code == "SESSION_ALREADY_RUNNING":
+        return {
+            "id": "replace-active-session",
+            "label": "Replace active session",
+            "reason": "Active session conflict blocked ensure/reuse flow.",
+            "command": SESSION_RESTART_COMMAND,
+            "source": source,
+        }
+
+    if normalized_category == "cdp-unavailable" or normalized_code == "CDP_UNAVAILABLE":
+        return {
+            "id": "recover-cdp-session",
+            "label": "Recover CDP and session",
+            "reason": "CDP endpoint/session channel is unavailable.",
+            "command": VISUAL_START_RECOVERY_COMMAND,
+            "source": source,
+        }
+
+    if normalized_category == "ambiguous-target" or normalized_code == "AMBIGUOUS_TARGET":
+        return {
+            "id": "use-exact-target",
+            "label": "Use exact target match",
+            "reason": "Multiple tabs matched the requested target URL.",
+            "command": PIPELINE_RETRY_EXACT_COMMAND,
+            "source": source,
+        }
+
+    if normalized_code == "IMAGE_DIMENSION_MISMATCH":
+        return {
+            "id": "normalize-reference-size",
+            "label": "Retry with resize fallback",
+            "reason": "Reference/actual image dimensions differ.",
+            "command": PIPELINE_RETRY_BASE_COMMAND,
+            "source": source,
+        }
+
+    if normalized_code == "COMMAND_TIMEOUT":
+        return {
+            "id": "increase-timeout",
+            "label": "Retry with longer timeout",
+            "reason": "Command exceeded timeout window before completion.",
+            "command": PIPELINE_RETRY_TIMEOUT_COMMAND,
+            "source": source,
+        }
+
+    if normalized_code == "FILE_NOT_FOUND":
+        return {
+            "id": "verify-reference-path",
+            "label": "Verify file path",
+            "reason": "A referenced file path could not be resolved.",
+            "command": "ls -l <reference-image-path>",
+            "source": source,
+        }
+
+    if normalized_code == "VALIDATION_ERROR":
+        if stale_transport:
+            return {
+                "id": "stale-transport-retry",
+                "label": "Retry with fresh session",
+                "reason": "Validation error indicates stale/closed transport state.",
+                "command": PIPELINE_RETRY_FORCE_RECOVERY_COMMAND,
+                "source": source,
+            }
+        return {
+            "id": "fix-scenario-payload",
+            "label": "Fix scenario payload and retry",
+            "reason": "Validation failed for scenario command payload.",
+            "command": PIPELINE_RETRY_BASE_COMMAND,
+            "source": source,
+        }
+
+    return {
+        "id": "rerun-terminal-probe",
+        "label": "Rerun terminal-probe",
+        "reason": "Collect deterministic runtime artifacts for the next failure pass.",
+        "command": PIPELINE_RETRY_BASE_COMMAND,
+        "source": source,
+    }
+
+
+def select_primary_next_action(runtime_scenarios: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    for runtime_entry in runtime_scenarios:
+        if bool(runtime_entry.get("ok")):
+            continue
+        next_action = runtime_entry.get("nextAction")
+        if isinstance(next_action, dict):
+            return next_action
+    return None
+
+
+def build_black_screen_verdict(
+    metrics_scenarios: List[Dict[str, Any]],
+    runtime_scenarios: List[Dict[str, Any]],
+    black_frame_candidates: List[str],
+    framebuffer_metric_mismatches: List[str],
+) -> Dict[str, Any]:
+    screenshot_black_scenarios: List[str] = []
+    screenshot_non_black_scenarios: List[str] = []
+    framebuffer_black_scenarios: List[str] = []
+    runtime_render_error_scenarios: List[str] = []
+
+    for metrics_entry in metrics_scenarios:
+        if not isinstance(metrics_entry, dict):
+            continue
+        scenario_name = metrics_entry.get("name")
+        if not isinstance(scenario_name, str):
+            continue
+
+        image_metrics = metrics_entry.get("imageMetrics")
+        if isinstance(image_metrics, dict):
+            non_black_ratio = image_metrics.get("nonBlackRatio")
+            if isinstance(non_black_ratio, (int, float)):
+                if float(non_black_ratio) < 0.01:
+                    screenshot_black_scenarios.append(scenario_name)
+                else:
+                    screenshot_non_black_scenarios.append(scenario_name)
+
+        framebuffer_ratio = metrics_entry.get("framebufferNonBlackRatio")
+        if isinstance(framebuffer_ratio, (int, float)) and float(framebuffer_ratio) < 0.01:
+            framebuffer_black_scenarios.append(scenario_name)
+
+    render_error_hints = ["webgl", "shader", "render", "canvas", "context lost"]
+    for runtime_entry in runtime_scenarios:
+        if not isinstance(runtime_entry, dict):
+            continue
+        scenario_name = runtime_entry.get("name")
+        if not isinstance(scenario_name, str):
+            continue
+        errors = runtime_entry.get("errors")
+        if not isinstance(errors, list):
+            continue
+        combined_error_text = " ".join(str(item) for item in errors).lower()
+        if any(hint in combined_error_text for hint in render_error_hints):
+            runtime_render_error_scenarios.append(scenario_name)
+
+    if screenshot_black_scenarios:
+        confidence = "high" if runtime_render_error_scenarios else "medium"
+        rationale = (
+            "Screenshot metrics show black frames; runtime render errors are also present."
+            if runtime_render_error_scenarios
+            else "Screenshot metrics show black frames."
+        )
+        status = "black-screen-probable"
+    elif runtime_render_error_scenarios:
+        confidence = "medium"
+        rationale = "Runtime render errors detected without black screenshot metrics."
+        status = "render-errors-without-black-screenshot"
+    elif framebuffer_metric_mismatches:
+        confidence = "medium"
+        rationale = (
+            "Framebuffer reported black, but screenshot metrics are non-black; "
+            "screenshot metrics + runtime errors are treated as source of truth."
+        )
+        status = "non-black-screenshot-with-framebuffer-black"
+    elif screenshot_non_black_scenarios:
+        confidence = "high"
+        rationale = "Screenshot metrics indicate non-black frames and no render-error evidence."
+        status = "no-black-screen-evidence"
+    else:
+        confidence = "low"
+        rationale = "Insufficient screenshot metrics to determine black-screen status."
+        status = "insufficient-evidence"
+
+    return {
+        "status": status,
+        "confidence": confidence,
+        "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+        "rationale": rationale,
+        "evidence": {
+            "screenshotBlackScenarios": sorted(set(screenshot_black_scenarios)),
+            "screenshotNonBlackScenarios": sorted(set(screenshot_non_black_scenarios)),
+            "framebufferBlackScenarios": sorted(set(framebuffer_black_scenarios)),
+            "framebufferMetricMismatches": sorted(set(framebuffer_metric_mismatches)),
+            "blackFrameCandidates": sorted(set(black_frame_candidates)),
+            "runtimeRenderErrorScenarios": sorted(set(runtime_render_error_scenarios)),
+        },
+    }
+
+
 def prepare_output_dir(project_root: Path, output_dir: Optional[str], session_id: str) -> Path:
     if output_dir:
         root = Path(output_dir).expanduser().resolve()
@@ -1151,6 +1503,7 @@ def run_pipeline(
             "snapshot": None,
             "compareReference": None,
             "errors": [],
+            "nextAction": None,
         }
 
         scenario_failed = False
@@ -1158,6 +1511,10 @@ def run_pipeline(
         for raw_step in scenario_commands:
             if not isinstance(raw_step, dict):
                 runtime_entry["errors"].append("Scenario command step must be an object")
+                runtime_entry["nextAction"] = build_failure_next_action(
+                    source="scenario-definition",
+                    error_message="Scenario command step must be an object",
+                )
                 scenario_failed = True
                 break
 
@@ -1165,6 +1522,11 @@ def run_pipeline(
                 command, payload = command_payload_from_step(raw_step, timeout_ms)
             except RuntimeError as exc:
                 runtime_entry["errors"].append(str(exc))
+                runtime_entry["nextAction"] = build_failure_next_action(
+                    source="scenario-definition",
+                    error_code="VALIDATION_ERROR",
+                    error_message=str(exc),
+                )
                 scenario_failed = True
                 break
 
@@ -1220,6 +1582,24 @@ def run_pipeline(
                             "Navigate fallback used evaluate(window.location.assign(...)) after navigate command failure."
                         )
                     else:
+                        runtime_entry["nextAction"] = build_failure_next_action(
+                            source="scenario-command",
+                            error_code=(
+                                str(fallback_result.get("errorCode"))
+                                if isinstance(fallback_result.get("errorCode"), str)
+                                else None
+                            ),
+                            error_message=(
+                                str(fallback_result.get("errorMessage"))
+                                if isinstance(fallback_result.get("errorMessage"), str)
+                                else str(fallback_result.get("error"))
+                            ),
+                            response_body_snippet=(
+                                str(fallback_result.get("responseBodySnippet"))
+                                if isinstance(fallback_result.get("responseBodySnippet"), str)
+                                else None
+                            ),
+                        )
                         scenario_failed = True
                         fallback_error_code = fallback_result.get("errorCode")
                         if isinstance(fallback_error_code, str) and fallback_error_code:
@@ -1238,6 +1618,24 @@ def run_pipeline(
                     continue
 
                 scenario_failed = True
+                runtime_entry["nextAction"] = build_failure_next_action(
+                    source="scenario-command",
+                    error_code=(
+                        str(command_result.get("errorCode"))
+                        if isinstance(command_result.get("errorCode"), str)
+                        else None
+                    ),
+                    error_message=(
+                        str(command_result.get("errorMessage"))
+                        if isinstance(command_result.get("errorMessage"), str)
+                        else str(command_result.get("error"))
+                    ),
+                    response_body_snippet=(
+                        str(command_result.get("responseBodySnippet"))
+                        if isinstance(command_result.get("responseBodySnippet"), str)
+                        else None
+                    ),
+                )
                 command_error_code = command_result.get("errorCode")
                 if isinstance(command_error_code, str) and command_error_code:
                     runtime_entry["errors"].append(
@@ -1280,8 +1678,30 @@ def run_pipeline(
                 else:
                     scenario_failed = True
                     runtime_entry["errors"].append("Snapshot command returned no image path")
+                    runtime_entry["nextAction"] = build_failure_next_action(
+                        source="snapshot",
+                        error_message="Snapshot command returned no image path",
+                    )
             else:
                 scenario_failed = True
+                runtime_entry["nextAction"] = build_failure_next_action(
+                    source="snapshot",
+                    error_code=(
+                        str(snapshot_result.get("errorCode"))
+                        if isinstance(snapshot_result.get("errorCode"), str)
+                        else None
+                    ),
+                    error_message=(
+                        str(snapshot_result.get("errorMessage"))
+                        if isinstance(snapshot_result.get("errorMessage"), str)
+                        else str(snapshot_result.get("error"))
+                    ),
+                    response_body_snippet=(
+                        str(snapshot_result.get("responseBodySnippet"))
+                        if isinstance(snapshot_result.get("responseBodySnippet"), str)
+                        else None
+                    ),
+                )
                 snapshot_error_code = snapshot_result.get("errorCode")
                 if isinstance(snapshot_error_code, str) and snapshot_error_code:
                     runtime_entry["errors"].append(
@@ -1379,6 +1799,24 @@ def run_pipeline(
             }
             if not compare_result["ok"]:
                 scenario_failed = True
+                runtime_entry["nextAction"] = build_failure_next_action(
+                    source="compare-reference",
+                    error_code=(
+                        str(compare_result.get("errorCode"))
+                        if isinstance(compare_result.get("errorCode"), str)
+                        else None
+                    ),
+                    error_message=(
+                        str(compare_result.get("errorMessage"))
+                        if isinstance(compare_result.get("errorMessage"), str)
+                        else str(compare_result.get("error"))
+                    ),
+                    response_body_snippet=(
+                        str(compare_result.get("responseBodySnippet"))
+                        if isinstance(compare_result.get("responseBodySnippet"), str)
+                        else None
+                    ),
+                )
                 compare_error_code = compare_result.get("errorCode")
                 if isinstance(compare_error_code, str) and compare_error_code:
                     runtime_entry["errors"].append(
@@ -1428,6 +1866,11 @@ def run_pipeline(
 
         runtime_entry["finishedAt"] = iso_now()
         runtime_entry["ok"] = not scenario_failed
+        if scenario_failed and not isinstance(runtime_entry.get("nextAction"), dict):
+            runtime_entry["nextAction"] = build_failure_next_action(
+                source="scenario",
+                error_message="Scenario failed without categorized error details",
+            )
 
         runtime_scenarios.append(runtime_entry)
         metrics_scenarios.append(metrics_entry)
@@ -1491,6 +1934,13 @@ def run_pipeline(
         for entry in runtime_scenarios
         if not bool(entry.get("ok")) and classify_failure_bucket(entry) == "app"
     ]
+    primary_next_action = None if overall_ok else select_primary_next_action(runtime_scenarios)
+    black_screen_verdict = build_black_screen_verdict(
+        metrics_scenarios=metrics_scenarios,
+        runtime_scenarios=runtime_scenarios,
+        black_frame_candidates=black_frame_candidates,
+        framebuffer_metric_mismatches=framebuffer_metric_mismatches,
+    )
 
     runtime_payload = {
         "generatedAt": iso_now(),
@@ -1501,6 +1951,8 @@ def run_pipeline(
         "sessionLifecycle": session_lifecycle,
         "scenarioCount": len(runtime_scenarios),
         "scenarios": runtime_scenarios,
+        "blackScreenVerdict": black_screen_verdict,
+        "nextAction": primary_next_action,
         "warnings": warnings,
     }
 
@@ -1531,6 +1983,8 @@ def run_pipeline(
         },
         "blackFrameCandidates": black_frame_candidates,
         "framebufferMetricMismatches": framebuffer_metric_mismatches,
+        "blackScreenVerdict": black_screen_verdict,
+        "nextAction": primary_next_action,
         "warnings": warnings,
     }
 
@@ -1552,6 +2006,8 @@ def run_pipeline(
         "failedScenarioCount": summary_payload["failedScenarioCount"],
         "toolingFailures": summary_payload["toolingFailures"],
         "appFailures": summary_payload["appFailures"],
+        "blackScreenVerdict": black_screen_verdict,
+        "nextAction": primary_next_action,
     }
 
 
@@ -1589,8 +2045,19 @@ def main() -> int:
     )
     parser.add_argument(
         "--open-tab-if-missing",
+        dest="open_tab_if_missing",
         action="store_true",
-        help="When auto session ensure reports TARGET_NOT_FOUND, open tab via CDP /json/new and retry once",
+        default=True,
+        help=(
+            "When auto session ensure reports TARGET_NOT_FOUND, open tab via CDP /json/new "
+            "and retry once (default: enabled)"
+        ),
+    )
+    parser.add_argument(
+        "--no-open-tab-if-missing",
+        dest="open_tab_if_missing",
+        action="store_false",
+        help="Disable automatic open-tab recovery when --session-id auto",
     )
     parser.add_argument("--scenarios", required=True, help="Path to scenario JSON file")
     parser.add_argument("--output-dir", default=None, help="Optional output directory for artifact bundle")
@@ -1630,6 +2097,10 @@ def main() -> int:
             "reason": (
                 "Terminal-probe pipeline explicitly selected for machine-verifiable fallback "
                 "or direct scenario capture."
+            ),
+            "alternateMode": "browser-fetch",
+            "alternateModeRationale": (
+                "Not selected because this command path is the terminal-probe fallback/capture lane."
             ),
         }
         resolved_session: Dict[str, Any] = {
@@ -1688,6 +2159,11 @@ def main() -> int:
                 "forceNewSession": False,
                 "openTabIfMissing": False,
                 "failureCategory": None,
+                "ensureAttempts": 0,
+                "firstEnsureAttemptSucceeded": False,
+                "fallbackUsed": False,
+                "fallbackActionsUsed": [],
+                "attachBranch": "explicit-session-id",
                 "actions": [],
             }
 
@@ -1707,7 +2183,44 @@ def main() -> int:
         )
         result["modeSelection"] = mode_selection
         result["resolvedSession"] = resolved_session
+    except AutoSessionResolutionError as exc:
+        next_action = build_failure_next_action(
+            source="session-lifecycle",
+            error_code=exc.error_code,
+            error_message=str(exc),
+            failure_category=exc.failure_category,
+        )
+        error_payload = {
+            "ok": False,
+            "error": str(exc),
+            "errorCode": exc.error_code,
+            "failureCategory": exc.failure_category,
+            "sessionLifecycle": exc.lifecycle,
+            "nextAction": next_action,
+        }
+        if args.json:
+            print(json.dumps(error_payload, ensure_ascii=True))
+        else:
+            print(f"terminal_probe_pipeline.py failed: {exc}", file=sys.stderr)
+            print(f"- nextAction: {json.dumps(next_action, ensure_ascii=True)}")
+        return 1
     except Exception as exc:  # noqa: BLE001
+        next_action = build_failure_next_action(
+            source="pipeline",
+            error_message=str(exc),
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": str(exc),
+                        "nextAction": next_action,
+                    },
+                    ensure_ascii=True,
+                )
+            )
+            return 1
         print(f"terminal_probe_pipeline.py failed: {exc}", file=sys.stderr)
         return 1
 
@@ -1726,6 +2239,10 @@ def main() -> int:
         session_lifecycle = result.get("resolvedSession", {}).get("lifecycle")
         if isinstance(session_lifecycle, dict):
             print(f"- sessionLifecycle: {json.dumps(session_lifecycle, ensure_ascii=True)}")
+        if isinstance(result.get("blackScreenVerdict"), dict):
+            print(f"- blackScreenVerdict: {json.dumps(result['blackScreenVerdict'], ensure_ascii=True)}")
+        if isinstance(result.get("nextAction"), dict):
+            print(f"- nextAction: {json.dumps(result['nextAction'], ensure_ascii=True)}")
         if result["warnings"]:
             print(f"- warnings: {json.dumps(result['warnings'], ensure_ascii=True)}")
 

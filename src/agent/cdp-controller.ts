@@ -47,6 +47,16 @@ export class AmbiguousTargetError extends Error {
 }
 
 const DEFAULT_HOST = "127.0.0.1";
+const LOAD_EVENT_FALLBACK_HINTS = [
+  "once is not a function",
+  "loadeventfired is not a function",
+  "did not return a promise",
+];
+const DOM_READY_TRANSIENT_HINTS = [
+  "execution context was destroyed",
+  "cannot find context",
+  "context not found",
+];
 
 function wildcardMatch(input: string, pattern: string): boolean {
   if (!pattern.includes("*")) {
@@ -117,13 +127,12 @@ export class CdpController {
 
   async reload(timeoutMs: number): Promise<{ ok: true }> {
     const client = this.requireClient();
-    const done = this.withTimeout(client.Page.loadEventFired(), timeoutMs);
+    const loadEvent = this.prepareLoadEventPromise(client);
 
     try {
       await client.Page.reload({ ignoreCache: false });
-      await done;
+      await this.waitForNavigationCompletion(client, loadEvent, timeoutMs);
     } catch (error) {
-      void done.catch(() => undefined);
       throw error;
     }
     return { ok: true };
@@ -131,13 +140,12 @@ export class CdpController {
 
   async navigate(url: string, timeoutMs: number): Promise<{ ok: true; url: string }> {
     const client = this.requireClient();
-    const done = this.withTimeout(client.Page.loadEventFired(), timeoutMs);
+    const loadEvent = this.prepareLoadEventPromise(client);
 
     try {
       await client.Page.navigate({ url });
-      await done;
+      await this.waitForNavigationCompletion(client, loadEvent, timeoutMs);
     } catch (error) {
-      void done.catch(() => undefined);
       throw error;
     }
     return { ok: true, url };
@@ -509,6 +517,90 @@ export class CdpController {
       throw new CdpUnavailableError("CDP client is not attached");
     }
     return this.connected.client;
+  }
+
+  private prepareLoadEventPromise(client: CdpClient): Promise<unknown> | null {
+    const loadEventFired = client.Page.loadEventFired;
+    if (typeof loadEventFired !== "function") {
+      return null;
+    }
+
+    try {
+      const maybePromise = loadEventFired.call(client.Page);
+      if (!maybePromise || typeof (maybePromise as Promise<unknown>).then !== "function") {
+        return Promise.reject(new Error("Page.loadEventFired did not return a promise"));
+      }
+      return maybePromise as Promise<unknown>;
+    } catch (error) {
+      if (this.shouldFallbackFromLoadEvent(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private async waitForNavigationCompletion(
+    client: CdpClient,
+    loadEvent: Promise<unknown> | null,
+    timeoutMs: number,
+  ): Promise<void> {
+    if (loadEvent) {
+      try {
+        await this.withTimeout(loadEvent, timeoutMs);
+        return;
+      } catch (error) {
+        if (!this.shouldFallbackFromLoadEvent(error)) {
+          throw error;
+        }
+      }
+    }
+
+    await this.waitForDocumentReadyState(client, timeoutMs);
+  }
+
+  private async waitForDocumentReadyState(client: CdpClient, timeoutMs: number): Promise<void> {
+    const deadline = Date.now() + Math.max(1, timeoutMs);
+    while (Date.now() < deadline) {
+      const remaining = Math.max(1, deadline - Date.now());
+      const probeTimeout = Math.max(1, Math.min(remaining, 250));
+      try {
+        const evaluated = (await this.withTimeout(
+          client.Runtime.evaluate({
+            expression: "document.readyState",
+            returnByValue: true,
+            awaitPromise: true,
+          }),
+          probeTimeout,
+        )) as { result: { value?: unknown } };
+        const readyState = evaluated.result?.value;
+        if (readyState === "interactive" || readyState === "complete") {
+          return;
+        }
+      } catch (error) {
+        if (!this.isTransientDomReadyProbeError(error)) {
+          throw error;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, 50)));
+    }
+
+    throw new CommandTimeoutError(`Command timed out after ${timeoutMs}ms`);
+  }
+
+  private shouldFallbackFromLoadEvent(error: unknown): boolean {
+    if (error instanceof CommandTimeoutError) {
+      return false;
+    }
+    const message = String(error).toLowerCase();
+    return LOAD_EVENT_FALLBACK_HINTS.some((hint) => message.includes(hint));
+  }
+
+  private isTransientDomReadyProbeError(error: unknown): boolean {
+    if (error instanceof CommandTimeoutError) {
+      return true;
+    }
+    const message = String(error).toLowerCase();
+    return DOM_READY_TRANSIENT_HINTS.some((hint) => message.includes(hint));
   }
 
   private async withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

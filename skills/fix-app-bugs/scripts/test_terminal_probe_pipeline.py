@@ -347,6 +347,8 @@ def main() -> int:
         assert payload["resolvedSession"]["auto"] is True, payload
         assert payload["resolvedSession"]["resolvedSessionId"] == "auto-session-id", payload
         assert payload["modeSelection"]["executionMode"] == "terminal-probe", payload
+        assert payload["modeSelection"]["alternateMode"] == "browser-fetch", payload
+        assert isinstance(payload["modeSelection"]["alternateModeRationale"], str), payload
         assert payload["scenarioCount"] == 1, payload
         runtime_path = Path(payload["runtimeJsonPath"])
         summary_path = Path(payload["summaryJsonPath"])
@@ -354,6 +356,9 @@ def main() -> int:
         assert summary_path.exists(), payload
         summary_payload = json.loads(summary_path.read_text(encoding="utf-8"))
         assert isinstance(summary_payload.get("sessionLifecycle"), dict), summary_payload
+        assert isinstance(summary_payload.get("blackScreenVerdict"), dict), summary_payload
+        assert summary_payload["blackScreenVerdict"]["sourceOfTruth"] == "screenshot-metrics-plus-runtime-errors", summary_payload
+        assert payload.get("nextAction") is None, payload
         assert observed_state.ensure_calls >= 1, observed_state
         assert observed_state.ensure_payloads[0]["matchStrategy"] == "origin-path", observed_state.ensure_payloads
 
@@ -379,7 +384,6 @@ def main() -> int:
             target_missing_dir,
             target_missing_state,
             baseline_scenarios,
-            extra_args=["--open-tab-if-missing"],
         )
         assert completed_open_tab.returncode == 0, completed_open_tab
         assert payload_open_tab["ok"] is True, payload_open_tab
@@ -387,9 +391,23 @@ def main() -> int:
         assert observed_open_tab.ensure_calls >= 2, observed_open_tab
         assert payload_open_tab["resolvedSession"]["lifecycle"]["failureCategory"] == "target-not-found", payload_open_tab
 
+        target_missing_disabled_state = FakeState(snapshot_path=snapshot_path, force_target_not_found_once=True)
+        target_missing_disabled_dir = root / "open-tab-disabled"
+        target_missing_disabled_dir.mkdir(parents=True, exist_ok=True)
+        completed_no_open_tab, payload_no_open_tab, observed_no_open_tab = run_case(
+            target_missing_disabled_dir,
+            target_missing_disabled_state,
+            baseline_scenarios,
+            extra_args=["--no-open-tab-if-missing"],
+        )
+        assert completed_no_open_tab.returncode == 1, completed_no_open_tab
+        assert payload_no_open_tab["ok"] is False, payload_no_open_tab
+        assert payload_no_open_tab["failureCategory"] == "target-not-found", payload_no_open_tab
+        assert payload_no_open_tab["nextAction"]["id"] == "open-tab-recovery", payload_no_open_tab
+        assert observed_no_open_tab.cdp_tab_opened is False, observed_no_open_tab
+
         cdp_list_state = FakeState(
             snapshot_path=snapshot_path,
-            force_target_not_found_once=True,
             cdp_list_targets=[
                 {
                     "id": "target-1",
@@ -408,11 +426,14 @@ def main() -> int:
         assert completed_cdp_list.returncode == 0, completed_cdp_list
         assert payload_cdp_list["ok"] is True, payload_cdp_list
         assert observed_cdp_list.cdp_tab_opened is False, observed_cdp_list
-        assert observed_cdp_list.ensure_calls >= 2, observed_cdp_list
-        assert observed_cdp_list.ensure_payloads[0]["matchStrategy"] == "origin-path", observed_cdp_list.ensure_payloads
-        assert observed_cdp_list.ensure_payloads[1]["matchStrategy"] == "exact", observed_cdp_list.ensure_payloads
-        assert observed_cdp_list.ensure_payloads[1]["tabUrl"] == "http://127.0.0.1:5173/?view=grid", observed_cdp_list.ensure_payloads
+        assert observed_cdp_list.ensure_calls == 1, observed_cdp_list
+        assert observed_cdp_list.ensure_payloads[0]["matchStrategy"] == "exact", observed_cdp_list.ensure_payloads
+        assert observed_cdp_list.ensure_payloads[0]["tabUrl"] == "http://127.0.0.1:5173/?view=grid", observed_cdp_list.ensure_payloads
         assert payload_cdp_list["resolvedSession"]["tabUrlMatchStrategy"] == "exact", payload_cdp_list
+        lifecycle = payload_cdp_list["resolvedSession"]["lifecycle"]
+        assert lifecycle["firstEnsureAttemptSucceeded"] is True, lifecycle
+        assert lifecycle["attachBranch"] == "preflight-resolve-target-from-cdp-list", lifecycle
+        assert lifecycle["fallbackActionsUsed"] == ["preflight-resolve-target-from-cdp-list"], lifecycle
 
         resize_state = FakeState(snapshot_path=snapshot_path, force_compare_dimension_mismatch_once=True)
         resize_dir = root / "resize-fallback"
@@ -470,7 +491,12 @@ def main() -> int:
         completed_fail, payload_fail, _ = run_case(fail_dir, fail_state, failing_scenarios)
         assert completed_fail.returncode == 2, completed_fail
         assert payload_fail["ok"] is False, payload_fail
+        assert payload_fail["nextAction"]["id"] == "fix-scenario-payload", payload_fail
+        assert isinstance(payload_fail.get("blackScreenVerdict"), dict), payload_fail
         runtime_fail = json.loads(Path(payload_fail["runtimeJsonPath"]).read_text(encoding="utf-8"))
+        summary_fail = json.loads(Path(payload_fail["summaryJsonPath"]).read_text(encoding="utf-8"))
+        assert summary_fail["nextAction"]["id"] == "fix-scenario-payload", summary_fail
+        assert isinstance(summary_fail.get("blackScreenVerdict"), dict), summary_fail
         command_entry = runtime_fail["scenarios"][0]["commands"][0]
         assert command_entry["errorCode"] == "VALIDATION_ERROR", command_entry
         assert "Invalid payload for evaluate" in command_entry["errorMessage"], command_entry

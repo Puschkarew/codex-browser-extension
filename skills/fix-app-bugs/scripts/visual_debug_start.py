@@ -255,6 +255,94 @@ def derive_readiness(bootstrap_payload: Dict[str, Any], mode: str) -> Dict[str, 
     }
 
 
+def build_readiness_verdict(mode: str, readiness: Dict[str, Any], next_actions: List[str]) -> Dict[str, Any]:
+    final_ready = bool(readiness.get("finalReady"))
+    reasons = normalize_readiness_reasons(readiness.get("finalReasons"))
+
+    if final_ready and mode == "terminal-probe":
+        status = "fallback"
+        mode_hint = "terminal-probe"
+        summary = "Readiness gate passed in terminal-probe fallback mode."
+    elif final_ready:
+        status = "runnable"
+        mode_hint = "core"
+        summary = "Readiness gate passed for scenario execution."
+    else:
+        status = "blocked"
+        mode_hint = "terminal-probe" if mode == "terminal-probe" else "core"
+        summary = "Readiness gate blocked scenario execution."
+
+    next_action = next_actions[0] if next_actions else None
+    return {
+        "status": status,
+        "modeHint": mode_hint,
+        "reasons": reasons,
+        "summary": summary,
+        "nextAction": next_action,
+    }
+
+
+def build_resume_variant_command(base_args: List[str], extra_flags: List[str]) -> str:
+    variant = list(base_args)
+    for flag in extra_flags:
+        if flag not in variant:
+            variant.append(flag)
+    return shell_join(variant)
+
+
+def build_recovery_lane(
+    app_url_status: Optional[str],
+    readiness_reasons: List[str],
+    preview_command: str,
+    apply_command: str,
+    resume_command: str,
+    soft_recovery_command: str,
+    force_new_session_command: str,
+    open_tab_recovery_command: str,
+) -> Dict[str, Any]:
+    normalized_reasons = normalize_readiness_reasons(readiness_reasons)
+    app_url_reasons = [reason for reason in normalized_reasons if reason.startswith("app-url-gate:")]
+    session_recovery_reasons = [
+        reason
+        for reason in normalized_reasons
+        if reason.startswith("session-state:") or reason.startswith("cdp-unavailable")
+    ]
+    app_status_normalized = app_url_status.strip().lower() if isinstance(app_url_status, str) else None
+
+    if app_status_normalized in {"mismatch", "not-provided", "invalid-actual-url"} or app_url_reasons:
+        actions = [
+            {"id": "preview-config-fix", "label": "Preview config fix", "command": preview_command},
+            {"id": "apply-config-fix", "label": "Apply config fix", "command": apply_command},
+            {"id": "resume-after-config-fix", "label": "Resume visual starter", "command": resume_command},
+        ]
+        return {
+            "class": "config-alignment",
+            "reason": app_url_reasons[0] if app_url_reasons else f"app-url-status:{app_status_normalized}",
+            "actions": actions,
+            "primaryAction": actions[0],
+        }
+
+    if session_recovery_reasons:
+        actions = [
+            {"id": "soft-recovery", "label": "Soft session recovery", "command": soft_recovery_command},
+            {"id": "force-new-session", "label": "Force new session", "command": force_new_session_command},
+            {"id": "open-tab-recovery", "label": "Open tab if missing", "command": open_tab_recovery_command},
+        ]
+        return {
+            "class": "session-cdp-recovery",
+            "reason": session_recovery_reasons[0],
+            "actions": actions,
+            "primaryAction": actions[0],
+        }
+
+    return {
+        "class": "none",
+        "reason": None,
+        "actions": [],
+        "primaryAction": None,
+    }
+
+
 def collect_next_actions(payload: Dict[str, Any]) -> List[str]:
     actions: List[str] = []
 
@@ -576,6 +664,8 @@ def run_terminal_probe_capture(
         command.append("--force-new-session")
     if open_tab_if_missing:
         command.append("--open-tab-if-missing")
+    else:
+        command.append("--no-open-tab-if-missing")
     if output_dir:
         command.extend(["--output-dir", output_dir])
     return run_json_command(command)
@@ -726,8 +816,16 @@ def main() -> int:
     )
     parser.add_argument(
         "--open-tab-if-missing",
+        dest="open_tab_if_missing",
         action="store_true",
-        help="Pass --open-tab-if-missing to terminal_probe_pipeline when capture runs",
+        default=True,
+        help="Pass --open-tab-if-missing to terminal_probe_pipeline when capture runs (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-open-tab-if-missing",
+        dest="open_tab_if_missing",
+        action="store_false",
+        help="Pass --no-open-tab-if-missing to terminal_probe_pipeline when capture runs",
     )
     parser.add_argument(
         "--auto-recover-session",
@@ -824,10 +922,22 @@ def main() -> int:
             mode_reason = browser_reason or "Guarded bootstrap allows browser instrumentation."
         elif mode == "terminal-probe":
             mode_reason = browser_reason or "Guarded bootstrap requires terminal-probe fallback."
+    if mode == "terminal-probe":
+        alternate_mode = "browser-fetch"
+        alternate_mode_rationale = (
+            "Not selected because this run executes terminal-probe fallback/capture flow."
+        )
+    else:
+        alternate_mode = "terminal-probe"
+        alternate_mode_rationale = (
+            "Not selected because browser instrumentation is available for this readiness state."
+        )
     mode_selection = {
         "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
         "executionMode": mode,
         "reason": mode_reason,
+        "alternateMode": alternate_mode,
+        "alternateModeRationale": alternate_mode_rationale,
     }
     config_change_summary = {
         "appliedRecommendations": bool(context["appliedRecommendations"]),
@@ -861,6 +971,8 @@ def main() -> int:
         resume_command_args.append("--force-new-session")
     if args.open_tab_if_missing:
         resume_command_args.append("--open-tab-if-missing")
+    else:
+        resume_command_args.append("--no-open-tab-if-missing")
     if as_string(args.tab_url_match_strategy):
         resume_command_args.extend(["--tab-url-match-strategy", str(args.tab_url_match_strategy)])
     if args.auto_recover_session:
@@ -872,6 +984,12 @@ def main() -> int:
     if as_string(args.evidence_label):
         resume_command_args.extend(["--evidence-label", str(args.evidence_label)])
     resume_command = shell_join(resume_command_args)
+    soft_recovery_command = build_resume_variant_command(resume_command_args, ["--auto-recover-session"])
+    force_new_session_command = build_resume_variant_command(resume_command_args, ["--force-new-session"])
+    open_tab_recovery_command = build_resume_variant_command(
+        resume_command_args,
+        ["--force-new-session", "--open-tab-if-missing"],
+    )
     preview_command = shell_join(
         [
             "python3",
@@ -913,6 +1031,7 @@ def main() -> int:
         next_actions.append(f"Resume visual starter: {resume_command}")
 
     terminal_probe_result: Optional[Dict[str, Any]] = None
+    terminal_probe_next_action: Optional[Dict[str, Any]] = None
     scenarios_temp_path: Optional[Path] = None
 
     can_run_terminal_probe = (
@@ -954,6 +1073,18 @@ def main() -> int:
             next_actions.append(f"Review summary: {probe_payload['summaryJsonPath']}")
         else:
             next_actions.append("Terminal-probe capture did not return summaryJsonPath; inspect stderr and rerun.")
+        if isinstance(probe_payload, dict):
+            raw_probe_next_action = probe_payload.get("nextAction")
+            if isinstance(raw_probe_next_action, dict):
+                terminal_probe_next_action = raw_probe_next_action
+                action_command = as_string(raw_probe_next_action.get("command"))
+                action_label = as_string(raw_probe_next_action.get("label"))
+                if action_label and action_command:
+                    next_actions.append(f"Terminal-probe next action ({action_label}): {action_command}")
+                elif action_command:
+                    next_actions.append(f"Terminal-probe next action: {action_command}")
+                else:
+                    next_actions.append("Terminal-probe reported nextAction; inspect terminalProbe.nextAction for details.")
 
     if mode == "terminal-probe" and not args.scenarios:
         next_actions.append(f"Built-in scenario profile in use: {args.scenario_profile}")
@@ -1015,7 +1146,25 @@ def main() -> int:
     elif mode == "terminal-probe" and args.skip_terminal_probe:
         next_actions.append("Run terminal-probe scenarios manually when ready.")
 
+    recovery_lane = build_recovery_lane(
+        app_url_status=app_url_status,
+        readiness_reasons=final_reasons,
+        preview_command=preview_command,
+        apply_command=apply_command,
+        resume_command=resume_command,
+        soft_recovery_command=soft_recovery_command,
+        force_new_session_command=force_new_session_command,
+        open_tab_recovery_command=open_tab_recovery_command,
+    )
+    primary_action = recovery_lane.get("primaryAction")
+    if isinstance(primary_action, dict):
+        label = as_string(primary_action.get("label"))
+        command = as_string(primary_action.get("command"))
+        if label and command:
+            next_actions.insert(0, f"{label}: {command}")
+
     next_actions = unique_strings(next_actions)
+    readiness_verdict = build_readiness_verdict(mode, readiness, next_actions)
 
     exit_code = compute_exit_code(
         bootstrap=bootstrap,
@@ -1042,8 +1191,11 @@ def main() -> int:
         "bootstrapConfigChanges": config_change_summary,
         "configAlignment": config_alignment,
         "recovery": recovery,
+        "recoveryLane": recovery_lane,
         "readiness": readiness,
+        "readinessVerdict": readiness_verdict,
         "terminalProbe": terminal_probe_result,
+        "terminalProbeNextAction": terminal_probe_next_action,
         "headedEvidence": headed_evidence,
         "nextActions": next_actions,
     }

@@ -30,6 +30,36 @@ type IssueAggregate = {
   samples: IssueSample[];
 };
 
+type SignalConfidence = "high" | "medium" | "low";
+type SignalPriority = "p0" | "p1" | "p2";
+type PromotionStatus = "promoted" | "deferred";
+
+type SignalPromotion = {
+  status: PromotionStatus;
+  probable: boolean;
+  reason: string;
+  minDistinctSessionsRequired: number;
+  observedDistinctSessions: number;
+};
+
+type StructuredSignal = {
+  signalId: string;
+  issueId: string;
+  area: "plugin" | "skill" | "shared";
+  signalType: "explicit" | "inferred";
+  confidence: SignalConfidence;
+  priorityHint: SignalPriority;
+  count: number;
+  summary: string;
+  evidenceRefs: Array<{
+    sessionId: string | null;
+    timestamp: string | null;
+    workspace: string | null;
+    filePath: string;
+  }>;
+  promotion: SignalPromotion;
+};
+
 type SessionSummary = {
   filePath: string;
   sessionId: string | null;
@@ -39,6 +69,14 @@ type SessionSummary = {
 };
 
 type FeedbackReport = {
+  schemaVersion: string;
+  promotionRules: {
+    probableSignalPolicy: {
+      definition: string;
+      minDistinctSessionsForBacklog: number;
+      appliesTo: Array<SignalPriority>;
+    };
+  };
   generatedAt: string;
   windowHours: number;
   windowStartUtc: string;
@@ -49,6 +87,8 @@ type FeedbackReport = {
   workspaceCounts: Array<{ workspace: string; count: number }>;
   sessions: SessionSummary[];
   issues: IssueAggregate[];
+  signals: StructuredSignal[];
+  backlogSlice: StructuredSignal[];
 };
 
 const NOISE_PATTERNS: RegExp[] = [
@@ -57,6 +97,8 @@ const NOISE_PATTERNS: RegExp[] = [
   /<skill>/i,
   /<INSTRUCTIONS>/i,
 ];
+
+const MIN_DISTINCT_SESSIONS_FOR_PROBABLE_PROMOTION = 2;
 
 const ISSUE_DEFINITIONS: IssueDefinition[] = [
   {
@@ -226,6 +268,121 @@ function pushIssueSample(aggregate: IssueAggregate, sample: IssueSample): void {
   aggregate.samples.push(sample);
 }
 
+function deriveSignalConfidence(issue: IssueAggregate): SignalConfidence {
+  if (issue.signalType === "explicit") {
+    return issue.count >= 2 ? "high" : "medium";
+  }
+  if (issue.count >= 3) {
+    return "medium";
+  }
+  return "low";
+}
+
+function derivePriorityHint(issue: IssueAggregate, confidence: SignalConfidence): SignalPriority {
+  if (issue.signalType === "explicit" && issue.count >= 3 && confidence === "high") {
+    return "p0";
+  }
+  if (issue.count >= 2 || confidence === "medium") {
+    return "p1";
+  }
+  return "p2";
+}
+
+function isProbableSignal(signal: StructuredSignal): boolean {
+  return signal.signalType === "inferred" || signal.confidence === "low";
+}
+
+function countDistinctSessionsForSignal(signal: StructuredSignal): number {
+  const seen = new Set<string>();
+  for (const ref of signal.evidenceRefs) {
+    if (ref.sessionId && ref.sessionId.length > 0) {
+      seen.add(`session:${ref.sessionId}`);
+    } else {
+      seen.add(`file:${ref.filePath}`);
+    }
+  }
+  return seen.size;
+}
+
+function buildSignalPromotion(signal: StructuredSignal): SignalPromotion {
+  const probable = isProbableSignal(signal);
+  const observedDistinctSessions = countDistinctSessionsForSignal(signal);
+  if (
+    probable &&
+    (signal.priorityHint === "p1" || signal.priorityHint === "p2") &&
+    observedDistinctSessions < MIN_DISTINCT_SESSIONS_FOR_PROBABLE_PROMOTION
+  ) {
+    return {
+      status: "deferred",
+      probable,
+      reason: "Probable signal needs repeated evidence across independent sessions.",
+      minDistinctSessionsRequired: MIN_DISTINCT_SESSIONS_FOR_PROBABLE_PROMOTION,
+      observedDistinctSessions,
+    };
+  }
+
+  return {
+    status: "promoted",
+    probable,
+    reason: probable
+      ? "Probable signal met recurrence threshold and is eligible for backlog."
+      : "Signal is explicit/non-probable and eligible for backlog.",
+    minDistinctSessionsRequired: MIN_DISTINCT_SESSIONS_FOR_PROBABLE_PROMOTION,
+    observedDistinctSessions,
+  };
+}
+
+function applyPromotionRules(signals: StructuredSignal[]): {
+  signals: StructuredSignal[];
+  backlogSlice: StructuredSignal[];
+} {
+  const withPromotion = signals.map((signal) => ({
+    ...signal,
+    promotion: buildSignalPromotion(signal),
+  }));
+  return {
+    signals: withPromotion,
+    backlogSlice: withPromotion.filter((signal) => signal.promotion.status === "promoted"),
+  };
+}
+
+function buildStructuredSignals(issues: IssueAggregate[]): StructuredSignal[] {
+  return issues.map((issue, index) => {
+    const confidence = deriveSignalConfidence(issue);
+    const priorityHint = derivePriorityHint(issue, confidence);
+
+    return {
+      signalId: `signal-${index + 1}`,
+      issueId: issue.id,
+      area: issue.area,
+      signalType: issue.signalType,
+      confidence,
+      priorityHint,
+      count: issue.count,
+      summary: issue.description,
+      evidenceRefs: issue.samples.map((sample) => ({
+        sessionId: sample.sessionId,
+        timestamp: sample.timestamp,
+        workspace: sample.workspace,
+        filePath: sample.filePath,
+      })),
+      promotion: {
+        status: "promoted",
+        probable: false,
+        reason: "Pending promotion evaluation.",
+        minDistinctSessionsRequired: MIN_DISTINCT_SESSIONS_FOR_PROBABLE_PROMOTION,
+        observedDistinctSessions: 0,
+      },
+    };
+  });
+}
+
+function priorityRank(priority: SignalPriority): number {
+  if (priority === "p0") return 0;
+  if (priority === "p1") return 1;
+  return 2;
+}
+
 async function analyzeSessionFile(
   filePath: string,
   targetPattern: RegExp,
@@ -344,6 +501,18 @@ function formatReportAsMarkdown(report: FeedbackReport): string {
   }
   lines.push("");
 
+  lines.push("## Promotion Rules");
+  lines.push(
+    `- probable definition: \`${report.promotionRules.probableSignalPolicy.definition}\``,
+  );
+  lines.push(
+    `- min distinct sessions for probable backlog promotion: \`${report.promotionRules.probableSignalPolicy.minDistinctSessionsForBacklog}\``,
+  );
+  lines.push(
+    `- applies to priorities: \`${report.promotionRules.probableSignalPolicy.appliesTo.join(",")}\``,
+  );
+  lines.push("");
+
   lines.push("## Issue Counts");
   if (report.issues.length === 0) {
     lines.push("- no issues matched configured patterns");
@@ -357,6 +526,36 @@ function formatReportAsMarkdown(report: FeedbackReport): string {
           `  sample: session=\`${sample.sessionId ?? "unknown"}\` ts=\`${sample.timestamp ?? "unknown"}\` file=\`${sample.filePath}\``,
         );
       }
+    }
+  }
+  lines.push("");
+
+  lines.push("## Structured Signals");
+  if (report.signals.length === 0) {
+    lines.push("- no structured signals detected");
+  } else {
+    for (const signal of report.signals) {
+      lines.push(
+        `- \`${signal.signalId}\` issue=\`${signal.issueId}\` priority=\`${signal.priorityHint}\` confidence=\`${signal.confidence}\` area=\`${signal.area}\` count=\`${signal.count}\` promotion=\`${signal.promotion.status}\``,
+      );
+      lines.push(
+        `  promotion: probable=\`${signal.promotion.probable}\` observedDistinctSessions=\`${signal.promotion.observedDistinctSessions}\` required=\`${signal.promotion.minDistinctSessionsRequired}\` reason=\`${signal.promotion.reason}\``,
+      );
+      for (const ref of signal.evidenceRefs) {
+        lines.push(
+          `  evidence: session=\`${ref.sessionId ?? "unknown"}\` ts=\`${ref.timestamp ?? "unknown"}\` file=\`${ref.filePath}\``,
+        );
+      }
+    }
+  }
+  lines.push("");
+
+  lines.push("## Backlog Slice");
+  if (report.backlogSlice.length === 0) {
+    lines.push("- no backlog signals produced");
+  } else {
+    for (const signal of report.backlogSlice) {
+      lines.push(`- [${signal.priorityHint.toUpperCase()}] ${signal.issueId} - ${signal.summary}`);
     }
   }
   lines.push("");
@@ -403,6 +602,14 @@ async function main(): Promise<void> {
   }
 
   const report: FeedbackReport = {
+    schemaVersion: "2026-02-18-feedback-signals-v1",
+    promotionRules: {
+      probableSignalPolicy: {
+        definition: "signalType=inferred or confidence=low",
+        minDistinctSessionsForBacklog: MIN_DISTINCT_SESSIONS_FOR_PROBABLE_PROMOTION,
+        appliesTo: ["p1", "p2"],
+      },
+    },
     generatedAt: new Date(windowEndMs).toISOString(),
     windowHours,
     windowStartUtc: toUtcIso(windowStartMs),
@@ -417,7 +624,18 @@ async function main(): Promise<void> {
     issues: Array.from(issuesById.values())
       .filter((issue) => issue.count > 0)
       .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id)),
+    signals: [],
+    backlogSlice: [],
   };
+  const sortedSignals = buildStructuredSignals(report.issues).sort(
+    (a, b) =>
+      priorityRank(a.priorityHint) - priorityRank(b.priorityHint) ||
+      b.count - a.count ||
+      a.issueId.localeCompare(b.issueId),
+  );
+  const promotedSignals = applyPromotionRules(sortedSignals);
+  report.signals = promotedSignals.signals;
+  report.backlogSlice = promotedSignals.backlogSlice;
 
   if (hasFlag("--json")) {
     console.log(JSON.stringify(report, null, 2));
