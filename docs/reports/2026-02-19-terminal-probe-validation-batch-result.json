@@ -1,0 +1,97 @@
+{
+  "command": [
+    "python3",
+    "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py",
+    "--project-root",
+    "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+    "--core-base-url",
+    "http://127.0.0.1:58106",
+    "--session-id",
+    "auto",
+    "--tab-url",
+    "http://127.0.0.1:5173/",
+    "--tab-url-match-strategy",
+    "exact",
+    "--no-open-tab-if-missing",
+    "--scenarios",
+    "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/scenarios.json",
+    "--output-dir",
+    "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run",
+    "--json"
+  ],
+  "returncode": 0,
+  "stdout": "{\"ok\": true, \"outputDir\": \"/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run\", \"runtimeJsonPath\": \"/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/runtime.json\", \"metricsJsonPath\": \"/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/metrics.json\", \"summaryJsonPath\": \"/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/summary.json\", \"warnings\": [], \"scenarioCount\": 3, \"failedScenarioCount\": 0, \"toolingFailures\": [], \"appFailures\": [], \"blackScreenVerdict\": {\"status\": \"no-black-screen-evidence\", \"confidence\": \"high\", \"sourceOfTruth\": \"screenshot-metrics-plus-runtime-errors\", \"rationale\": \"Screenshot metrics indicate non-black frames and no render-error evidence.\", \"evidence\": {\"screenshotBlackScenarios\": [], \"screenshotNonBlackScenarios\": [\"validation-batch-1\", \"validation-batch-2\", \"validation-batch-3\"], \"framebufferBlackScenarios\": [], \"framebufferMetricMismatches\": [], \"blackFrameCandidates\": [], \"runtimeRenderErrorScenarios\": []}}, \"nextAction\": null, \"modeSelection\": {\"selectedMode\": \"Enhanced mode (fix-app-bugs optional addon)\", \"executionMode\": \"terminal-probe\", \"reason\": \"Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.\", \"alternateMode\": \"browser-fetch\", \"alternateModeRationale\": \"Not selected because this command path is the terminal-probe fallback/capture lane.\"}, \"resolvedSession\": {\"requestedSessionId\": \"auto\", \"resolvedSessionId\": \"validation-batch-session\", \"auto\": true, \"reused\": false, \"tabUrl\": \"http://127.0.0.1:5173/\", \"tabUrlMatchStrategy\": \"exact\", \"forceNewSession\": false, \"openTabIfMissing\": false, \"lifecycle\": {\"forceNewSession\": false, \"openTabIfMissing\": false, \"tabUrlMatchStrategy\": \"exact\", \"failureCategory\": null, \"ensureAttempts\": 1, \"firstEnsureAttemptSucceeded\": true, \"fallbackUsed\": false, \"fallbackActionsUsed\": [], \"attachBranch\": \"direct-ensure\", \"actions\": [{\"action\": \"ensure-session\", \"attempt\": 1, \"ok\": true, \"status\": 200, \"reused\": false, \"sessionId\": \"validation-batch-session\", \"attachedTargetUrl\": \"http://127.0.0.1:5173/\", \"tabUrl\": \"http://127.0.0.1:5173/\", \"matchStrategy\": \"exact\"}]}}}",
+  "stderr": "",
+  "pipelineResult": {
+    "ok": true,
+    "outputDir": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run",
+    "runtimeJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/runtime.json",
+    "metricsJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/metrics.json",
+    "summaryJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/summary.json",
+    "warnings": [],
+    "scenarioCount": 3,
+    "failedScenarioCount": 0,
+    "toolingFailures": [],
+    "appFailures": [],
+    "blackScreenVerdict": {
+      "status": "no-black-screen-evidence",
+      "confidence": "high",
+      "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+      "rationale": "Screenshot metrics indicate non-black frames and no render-error evidence.",
+      "evidence": {
+        "screenshotBlackScenarios": [],
+        "screenshotNonBlackScenarios": [
+          "validation-batch-1",
+          "validation-batch-2",
+          "validation-batch-3"
+        ],
+        "framebufferBlackScenarios": [],
+        "framebufferMetricMismatches": [],
+        "blackFrameCandidates": [],
+        "runtimeRenderErrorScenarios": []
+      }
+    },
+    "nextAction": null,
+    "modeSelection": {
+      "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+      "executionMode": "terminal-probe",
+      "reason": "Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.",
+      "alternateMode": "browser-fetch",
+      "alternateModeRationale": "Not selected because this command path is the terminal-probe fallback/capture lane."
+    },
+    "resolvedSession": {
+      "requestedSessionId": "auto",
+      "resolvedSessionId": "validation-batch-session",
+      "auto": true,
+      "reused": false,
+      "tabUrl": "http://127.0.0.1:5173/",
+      "tabUrlMatchStrategy": "exact",
+      "forceNewSession": false,
+      "openTabIfMissing": false,
+      "lifecycle": {
+        "forceNewSession": false,
+        "openTabIfMissing": false,
+        "tabUrlMatchStrategy": "exact",
+        "failureCategory": null,
+        "ensureAttempts": 1,
+        "firstEnsureAttemptSucceeded": true,
+        "fallbackUsed": false,
+        "fallbackActionsUsed": [],
+        "attachBranch": "direct-ensure",
+        "actions": [
+          {
+            "action": "ensure-session",
+            "attempt": 1,
+            "ok": true,
+            "status": 200,
+            "reused": false,
+            "sessionId": "validation-batch-session",
+            "attachedTargetUrl": "http://127.0.0.1:5173/",
+            "tabUrl": "http://127.0.0.1:5173/",
+            "matchStrategy": "exact"
+          }
+        ]
+      }
+    }
+  }
+}

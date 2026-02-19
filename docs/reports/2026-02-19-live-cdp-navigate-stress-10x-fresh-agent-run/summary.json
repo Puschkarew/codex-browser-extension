@@ -1,0 +1,97 @@
+{
+  "generatedAt": "2026-02-19T12:59:46.254129Z",
+  "mode": "terminal-probe",
+  "modeSelection": {
+    "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+    "executionMode": "terminal-probe",
+    "reason": "Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.",
+    "alternateMode": "browser-fetch",
+    "alternateModeRationale": "Not selected because this command path is the terminal-probe fallback/capture lane."
+  },
+  "sessionId": "f42dd4c4-afba-47c8-a950-ade8ad606128",
+  "sessionLifecycle": {
+    "forceNewSession": false,
+    "openTabIfMissing": true,
+    "tabUrlMatchStrategy": "origin-path",
+    "failureCategory": null,
+    "ensureAttempts": 1,
+    "firstEnsureAttemptSucceeded": true,
+    "fallbackUsed": true,
+    "fallbackActionsUsed": [
+      "preflight-resolve-target-from-cdp-list"
+    ],
+    "attachBranch": "preflight-resolve-target-from-cdp-list",
+    "actions": [
+      {
+        "action": "preflight-resolve-target-from-cdp-list",
+        "ok": true,
+        "errorCode": null,
+        "errorMessage": null,
+        "status": 200,
+        "endpoint": "http://127.0.0.1:9222/json/list",
+        "responseBodySnippet": "[ { \"description\": \"\", \"devtoolsFrontendUrl\": \"https://chrome-devtools-frontend.appspot.com/serve_rev/@ee36f024f43a5615aa1aea2186a06e5cabc45bb7/inspector.html?ws=127.0.0.1:9222/devtools/page/DE062042532D159F6632B8C3063A9928\", \"id\": \"DE062042532D159F6632B8C3063A9928\", \"title\": \"Ice Cream Pattern Shader\", \"type\": \"page\", \"url\": \"http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0\", \"webSocketDebuggerUrl\": \"ws://127.0.0.1:9222/devtools/page/DE062042532D159F6632B8C3063A9928\" } ]",
+        "matchCount": 1,
+        "candidates": [
+          {
+            "id": "DE062042532D159F6632B8C3063A9928",
+            "url": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0"
+          }
+        ],
+        "resolvedTabUrl": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0",
+        "targetId": "DE062042532D159F6632B8C3063A9928"
+      },
+      {
+        "action": "ensure-session",
+        "attempt": 1,
+        "ok": true,
+        "status": 200,
+        "reused": false,
+        "sessionId": "f42dd4c4-afba-47c8-a950-ade8ad606128",
+        "attachedTargetUrl": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0",
+        "tabUrl": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0",
+        "matchStrategy": "exact"
+      }
+    ]
+  },
+  "ok": true,
+  "scenarioCount": 10,
+  "failedScenarioCount": 0,
+  "scenariosWithReference": 0,
+  "toolingFailures": [],
+  "appFailures": [],
+  "averages": {
+    "mean": 0.48043900000000006,
+    "stddev": 0.13205640000000002,
+    "nonBlackRatio": 1.0,
+    "maeRgb": null
+  },
+  "blackFrameCandidates": [],
+  "framebufferMetricMismatches": [],
+  "blackScreenVerdict": {
+    "status": "no-black-screen-evidence",
+    "confidence": "high",
+    "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+    "rationale": "Screenshot metrics indicate non-black frames and no render-error evidence.",
+    "evidence": {
+      "screenshotBlackScenarios": [],
+      "screenshotNonBlackScenarios": [
+        "navigate-cycle-01",
+        "navigate-cycle-02",
+        "navigate-cycle-03",
+        "navigate-cycle-04",
+        "navigate-cycle-05",
+        "navigate-cycle-06",
+        "navigate-cycle-07",
+        "navigate-cycle-08",
+        "navigate-cycle-09",
+        "navigate-cycle-10"
+      ],
+      "framebufferBlackScenarios": [],
+      "framebufferMetricMismatches": [],
+      "blackFrameCandidates": [],
+      "runtimeRenderErrorScenarios": []
+    }
+  },
+  "nextAction": null,
+  "warnings": []
+}

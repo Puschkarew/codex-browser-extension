@@ -1,0 +1,112 @@
+[
+  {
+    "name": "navigate-cycle-01",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=1",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-02",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=2",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-03",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=3",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-04",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=4",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-05",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=5",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-06",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=6",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-07",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=7",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-08",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=8",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-09",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=9",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "navigate-cycle-10",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?stress=10",
+        "timeoutMs": 10000
+      }
+    ],
+    "fullPage": true
+  }
+]

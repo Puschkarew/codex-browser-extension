@@ -1,0 +1,47 @@
+[
+  {
+    "name": "validation-batch-1",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?case=1",
+        "timeoutMs": 5000
+      },
+      {
+        "do": "webgl-diagnostics",
+        "timeoutMs": 5000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "validation-batch-2",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?case=2",
+        "timeoutMs": 5000
+      },
+      {
+        "do": "webgl-diagnostics",
+        "timeoutMs": 5000
+      }
+    ],
+    "fullPage": true
+  },
+  {
+    "name": "validation-batch-3",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/?case=3",
+        "timeoutMs": 5000
+      },
+      {
+        "do": "webgl-diagnostics",
+        "timeoutMs": 5000
+      }
+    ],
+    "fullPage": true
+  }
+]

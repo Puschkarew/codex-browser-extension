@@ -1,0 +1,547 @@
+{
+  "generatedAt": "2026-02-19T13:00:02.761885Z",
+  "mode": "terminal-probe",
+  "modeSelection": {
+    "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+    "executionMode": "terminal-probe",
+    "reason": "Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.",
+    "alternateMode": "browser-fetch",
+    "alternateModeRationale": "Not selected because this command path is the terminal-probe fallback/capture lane."
+  },
+  "sessionId": "f42dd4c4-afba-47c8-a950-ade8ad606128",
+  "coreBaseUrl": "http://127.0.0.1:4678",
+  "sessionLifecycle": {
+    "forceNewSession": false,
+    "openTabIfMissing": true,
+    "tabUrlMatchStrategy": "origin-path",
+    "failureCategory": null,
+    "ensureAttempts": 1,
+    "firstEnsureAttemptSucceeded": true,
+    "fallbackUsed": true,
+    "fallbackActionsUsed": [
+      "preflight-resolve-target-from-cdp-list"
+    ],
+    "attachBranch": "preflight-resolve-target-from-cdp-list",
+    "actions": [
+      {
+        "action": "preflight-resolve-target-from-cdp-list",
+        "ok": true,
+        "errorCode": null,
+        "errorMessage": null,
+        "status": 200,
+        "endpoint": "http://127.0.0.1:9222/json/list",
+        "responseBodySnippet": "[ { \"description\": \"\", \"devtoolsFrontendUrl\": \"https://chrome-devtools-frontend.appspot.com/serve_rev/@ee36f024f43a5615aa1aea2186a06e5cabc45bb7/inspector.html?ws=127.0.0.1:9222/devtools/page/DE062042532D159F6632B8C3063A9928\", \"id\": \"DE062042532D159F6632B8C3063A9928\", \"title\": \"Ice Cream Pattern Shader\", \"type\": \"page\", \"url\": \"http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0\", \"webSocketDebuggerUrl\": \"ws://127.0.0.1:9222/devtools/page/DE062042532D159F6632B8C3063A9928\" } ]",
+        "matchCount": 1,
+        "candidates": [
+          {
+            "id": "DE062042532D159F6632B8C3063A9928",
+            "url": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0"
+          }
+        ],
+        "resolvedTabUrl": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0",
+        "targetId": "DE062042532D159F6632B8C3063A9928"
+      },
+      {
+        "action": "ensure-session",
+        "attempt": 1,
+        "ok": true,
+        "status": 200,
+        "reused": true,
+        "sessionId": "f42dd4c4-afba-47c8-a950-ade8ad606128",
+        "attachedTargetUrl": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0",
+        "tabUrl": "http://127.0.0.1:5173/?effect=goosebumps&palette=energized&asset=chill&paused=0",
+        "matchStrategy": "exact"
+      }
+    ]
+  },
+  "scenarioCount": 10,
+  "scenarios": [
+    {
+      "name": "navigate-cycle-01",
+      "startedAt": "2026-02-19T12:59:58.028309Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=1",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=1"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505998238.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:59:58.504787Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-02",
+      "startedAt": "2026-02-19T12:59:58.504825Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=2",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=2"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505998704.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:59:58.966954Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-03",
+      "startedAt": "2026-02-19T12:59:58.966978Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=3",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=3"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505999172.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:59:59.438475Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-04",
+      "startedAt": "2026-02-19T12:59:59.438498Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=4",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=4"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505999646.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:59:59.913991Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-05",
+      "startedAt": "2026-02-19T12:59:59.914015Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=5",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=5"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506000120.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T13:00:00.377613Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-06",
+      "startedAt": "2026-02-19T13:00:00.377640Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=6",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=6"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506000578.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T13:00:00.854284Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-07",
+      "startedAt": "2026-02-19T13:00:00.854310Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=7",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=7"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506001060.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T13:00:01.347877Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-08",
+      "startedAt": "2026-02-19T13:00:01.347910Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=8",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=8"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506001544.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T13:00:01.820614Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-09",
+      "startedAt": "2026-02-19T13:00:01.820643Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=9",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=9"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506002029.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T13:00:02.301719Z",
+      "ok": true
+    },
+    {
+      "name": "navigate-cycle-10",
+      "startedAt": "2026-02-19T13:00:02.301774Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=10",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "ok": true,
+            "url": "http://127.0.0.1:5173/?stress=10"
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506002495.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T13:00:02.761781Z",
+      "ok": true
+    }
+  ],
+  "blackScreenVerdict": {
+    "status": "no-black-screen-evidence",
+    "confidence": "high",
+    "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+    "rationale": "Screenshot metrics indicate non-black frames and no render-error evidence.",
+    "evidence": {
+      "screenshotBlackScenarios": [],
+      "screenshotNonBlackScenarios": [
+        "navigate-cycle-01",
+        "navigate-cycle-02",
+        "navigate-cycle-03",
+        "navigate-cycle-04",
+        "navigate-cycle-05",
+        "navigate-cycle-06",
+        "navigate-cycle-07",
+        "navigate-cycle-08",
+        "navigate-cycle-09",
+        "navigate-cycle-10"
+      ],
+      "framebufferBlackScenarios": [],
+      "framebufferMetricMismatches": [],
+      "blackFrameCandidates": [],
+      "runtimeRenderErrorScenarios": []
+    }
+  },
+  "nextAction": null,
+  "warnings": []
+}

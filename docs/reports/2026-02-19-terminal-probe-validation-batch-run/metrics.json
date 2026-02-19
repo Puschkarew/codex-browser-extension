@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-02-19T12:49:37.689686Z",
+  "sessionId": "validation-batch-session",
+  "scenarioCount": 3,
+  "scenarios": [
+    {
+      "name": "validation-batch-1",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/snapshot-1.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.212656,
+        "stddev": 0.0,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": 0.62,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "validation-batch-2",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/snapshot-2.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.358981,
+        "stddev": 0.0,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": 0.62,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "validation-batch-3",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/snapshot-3.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.072186,
+        "stddev": 0.0,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": 0.62,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    }
+  ]
+}

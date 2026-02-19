@@ -1,0 +1,127 @@
+{
+  "generatedAt": "2026-02-19T12:48:54.268483Z",
+  "mode": "terminal-probe",
+  "modeSelection": {
+    "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+    "executionMode": "terminal-probe",
+    "reason": "Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.",
+    "alternateMode": "browser-fetch",
+    "alternateModeRationale": "Not selected because this command path is the terminal-probe fallback/capture lane."
+  },
+  "sessionId": "validation-session",
+  "coreBaseUrl": "http://127.0.0.1:58096",
+  "sessionLifecycle": {
+    "forceNewSession": false,
+    "openTabIfMissing": false,
+    "tabUrlMatchStrategy": "exact",
+    "failureCategory": null,
+    "ensureAttempts": 1,
+    "firstEnsureAttemptSucceeded": true,
+    "fallbackUsed": false,
+    "fallbackActionsUsed": [],
+    "attachBranch": "direct-ensure",
+    "actions": [
+      {
+        "action": "ensure-session",
+        "attempt": 1,
+        "ok": true,
+        "status": 200,
+        "reused": false,
+        "sessionId": "validation-session",
+        "attachedTargetUrl": "http://127.0.0.1:5173/",
+        "tabUrl": "http://127.0.0.1:5173/",
+        "matchStrategy": "exact"
+      }
+    ]
+  },
+  "scenarioCount": 1,
+  "scenarios": [
+    {
+      "name": "validation-baseline",
+      "startedAt": "2026-02-19T12:48:54.238842Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/",
+            "waitUntil": "load",
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "url": "http://127.0.0.1:5173/"
+          }
+        },
+        {
+          "command": "webgl-diagnostics",
+          "payload": {
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "readPixelsStatus": "ok",
+            "confidence": "medium",
+            "confidenceReason": "mock-validation",
+            "scene": {
+              "nonBlackRatio": 0.52
+            },
+            "capture": {
+              "nonBlackRatio": 0.48
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-run/snapshot.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:48:54.268416Z",
+      "ok": true
+    }
+  ],
+  "blackScreenVerdict": {
+    "status": "no-black-screen-evidence",
+    "confidence": "high",
+    "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+    "rationale": "Screenshot metrics indicate non-black frames and no render-error evidence.",
+    "evidence": {
+      "screenshotBlackScenarios": [],
+      "screenshotNonBlackScenarios": [
+        "validation-baseline"
+      ],
+      "framebufferBlackScenarios": [],
+      "framebufferMetricMismatches": [],
+      "blackFrameCandidates": [],
+      "runtimeRenderErrorScenarios": []
+    }
+  },
+  "nextAction": null,
+  "warnings": []
+}

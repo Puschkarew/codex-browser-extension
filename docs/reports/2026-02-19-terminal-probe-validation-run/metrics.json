@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-02-19T12:48:54.268497Z",
+  "sessionId": "validation-session",
+  "scenarioCount": 1,
+  "scenarios": [
+    {
+      "name": "validation-baseline",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-run/snapshot.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.212656,
+        "stddev": 0.0,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": 0.52,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    }
+  ]
+}

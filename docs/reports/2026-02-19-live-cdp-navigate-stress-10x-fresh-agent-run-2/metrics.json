@@ -1,0 +1,197 @@
+{
+  "generatedAt": "2026-02-19T13:00:02.761899Z",
+  "sessionId": "f42dd4c4-afba-47c8-a950-ade8ad606128",
+  "scenarioCount": 10,
+  "scenarios": [
+    {
+      "name": "navigate-cycle-01",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505998238.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480441,
+        "stddev": 0.132057,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-02",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505998704.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480432,
+        "stddev": 0.132054,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-03",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505999172.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480443,
+        "stddev": 0.132058,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-04",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771505999646.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480443,
+        "stddev": 0.132058,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-05",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506000120.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480442,
+        "stddev": 0.132057,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-06",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506000578.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.48043,
+        "stddev": 0.132054,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-07",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506001060.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480434,
+        "stddev": 0.132055,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-08",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506001544.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480434,
+        "stddev": 0.132055,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-09",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506002029.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480448,
+        "stddev": 0.13206,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    },
+    {
+      "name": "navigate-cycle-10",
+      "ok": true,
+      "snapshotPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/logs/browser-debug/f42dd4c4-afba-47c8-a950-ade8ad606128/screenshots/1771506002495.png",
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": true,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": null,
+        "mean": 0.480428,
+        "stddev": 0.132053,
+        "nonBlackRatio": 1.0,
+        "nonBlackPercent": 100.0
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": []
+    }
+  ]
+}

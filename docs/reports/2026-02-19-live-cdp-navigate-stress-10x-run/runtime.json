@@ -1,0 +1,442 @@
+{
+  "generatedAt": "2026-02-19T12:57:32.902512Z",
+  "mode": "terminal-probe",
+  "modeSelection": {
+    "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+    "executionMode": "terminal-probe",
+    "reason": "Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.",
+    "alternateMode": "browser-fetch",
+    "alternateModeRationale": "Not selected because this command path is the terminal-probe fallback/capture lane."
+  },
+  "sessionId": "f4c3efe8-dfd0-4ba7-ab5a-fd83829ecb7c",
+  "coreBaseUrl": "http://127.0.0.1:4678",
+  "sessionLifecycle": {
+    "forceNewSession": false,
+    "openTabIfMissing": true,
+    "tabUrlMatchStrategy": "exact",
+    "failureCategory": null,
+    "ensureAttempts": 1,
+    "firstEnsureAttemptSucceeded": true,
+    "fallbackUsed": false,
+    "fallbackActionsUsed": [],
+    "attachBranch": "direct-ensure",
+    "actions": [
+      {
+        "action": "ensure-session",
+        "attempt": 1,
+        "ok": true,
+        "status": 200,
+        "reused": true,
+        "sessionId": "f4c3efe8-dfd0-4ba7-ab5a-fd83829ecb7c",
+        "attachedTargetUrl": "http://127.0.0.1:5173/",
+        "tabUrl": "http://127.0.0.1:5173",
+        "matchStrategy": "exact"
+      }
+    ]
+  },
+  "scenarioCount": 10,
+  "scenarios": [
+    {
+      "name": "navigate-cycle-01",
+      "startedAt": "2026-02-19T12:57:32.895830Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=1",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.897610Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-02",
+      "startedAt": "2026-02-19T12:57:32.897617Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=2",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.898627Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-03",
+      "startedAt": "2026-02-19T12:57:32.898631Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=3",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.899041Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-04",
+      "startedAt": "2026-02-19T12:57:32.899043Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=4",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.899432Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-05",
+      "startedAt": "2026-02-19T12:57:32.899434Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=5",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.900123Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-06",
+      "startedAt": "2026-02-19T12:57:32.900128Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=6",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.900633Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-07",
+      "startedAt": "2026-02-19T12:57:32.900635Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=7",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.901166Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-08",
+      "startedAt": "2026-02-19T12:57:32.901169Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=8",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.901554Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-09",
+      "startedAt": "2026-02-19T12:57:32.901557Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=9",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.902068Z",
+      "ok": false
+    },
+    {
+      "name": "navigate-cycle-10",
+      "startedAt": "2026-02-19T12:57:32.902070Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?stress=10",
+            "waitUntil": "load",
+            "timeoutMs": 10000
+          },
+          "ok": false,
+          "status": 422,
+          "error": "Command failed",
+          "errorCode": "VALIDATION_ERROR",
+          "errorMessage": "Command failed",
+          "errorDetails": {
+            "reason": "Error: WebSocket is not open: readyState 3 (CLOSED)"
+          },
+          "responseBodySnippet": "{\"error\": {\"code\": \"VALIDATION_ERROR\", \"message\": \"Command failed\", \"reason\": \"Command failed\", \"nextAction\": null, \"details\": {\"reason\": \"Error: WebSocket is not open: readyState 3 (CLOSED)\"}}}",
+          "result": null
+        }
+      ],
+      "snapshot": null,
+      "compareReference": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ],
+      "nextAction": {
+        "id": "stale-transport-retry",
+        "label": "Retry with fresh session",
+        "reason": "Validation error indicates stale/closed transport state.",
+        "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+        "source": "scenario-command"
+      },
+      "finishedAt": "2026-02-19T12:57:32.902472Z",
+      "ok": false
+    }
+  ],
+  "blackScreenVerdict": {
+    "status": "insufficient-evidence",
+    "confidence": "low",
+    "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+    "rationale": "Insufficient screenshot metrics to determine black-screen status.",
+    "evidence": {
+      "screenshotBlackScenarios": [],
+      "screenshotNonBlackScenarios": [],
+      "framebufferBlackScenarios": [],
+      "framebufferMetricMismatches": [],
+      "blackFrameCandidates": [],
+      "runtimeRenderErrorScenarios": []
+    }
+  },
+  "nextAction": {
+    "id": "stale-transport-retry",
+    "label": "Retry with fresh session",
+    "reason": "Validation error indicates stale/closed transport state.",
+    "command": "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/terminal_probe_pipeline.py\" --project-root <project-root> --session-id auto --tab-url <url> --tab-url-match-strategy origin-path --scenarios <scenarios.json> --json --force-new-session --open-tab-if-missing",
+    "source": "scenario-command"
+  },
+  "warnings": []
+}

@@ -1,0 +1,267 @@
+{
+  "generatedAt": "2026-02-19T12:49:37.689679Z",
+  "mode": "terminal-probe",
+  "modeSelection": {
+    "selectedMode": "Enhanced mode (fix-app-bugs optional addon)",
+    "executionMode": "terminal-probe",
+    "reason": "Terminal-probe pipeline explicitly selected for machine-verifiable fallback or direct scenario capture.",
+    "alternateMode": "browser-fetch",
+    "alternateModeRationale": "Not selected because this command path is the terminal-probe fallback/capture lane."
+  },
+  "sessionId": "validation-batch-session",
+  "coreBaseUrl": "http://127.0.0.1:58106",
+  "sessionLifecycle": {
+    "forceNewSession": false,
+    "openTabIfMissing": false,
+    "tabUrlMatchStrategy": "exact",
+    "failureCategory": null,
+    "ensureAttempts": 1,
+    "firstEnsureAttemptSucceeded": true,
+    "fallbackUsed": false,
+    "fallbackActionsUsed": [],
+    "attachBranch": "direct-ensure",
+    "actions": [
+      {
+        "action": "ensure-session",
+        "attempt": 1,
+        "ok": true,
+        "status": 200,
+        "reused": false,
+        "sessionId": "validation-batch-session",
+        "attachedTargetUrl": "http://127.0.0.1:5173/",
+        "tabUrl": "http://127.0.0.1:5173/",
+        "matchStrategy": "exact"
+      }
+    ]
+  },
+  "scenarioCount": 3,
+  "scenarios": [
+    {
+      "name": "validation-batch-1",
+      "startedAt": "2026-02-19T12:49:37.622379Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?case=1",
+            "waitUntil": "load",
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "url": "http://127.0.0.1:5173/?case=1"
+          }
+        },
+        {
+          "command": "webgl-diagnostics",
+          "payload": {
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "readPixelsStatus": "ok",
+            "confidence": "medium",
+            "confidenceReason": "mock-validation-batch",
+            "scene": {
+              "nonBlackRatio": 0.62
+            },
+            "capture": {
+              "nonBlackRatio": 0.58
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/snapshot-1.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:49:37.646359Z",
+      "ok": true
+    },
+    {
+      "name": "validation-batch-2",
+      "startedAt": "2026-02-19T12:49:37.646386Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?case=2",
+            "waitUntil": "load",
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "url": "http://127.0.0.1:5173/?case=2"
+          }
+        },
+        {
+          "command": "webgl-diagnostics",
+          "payload": {
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "readPixelsStatus": "ok",
+            "confidence": "medium",
+            "confidenceReason": "mock-validation-batch",
+            "scene": {
+              "nonBlackRatio": 0.62
+            },
+            "capture": {
+              "nonBlackRatio": 0.58
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/snapshot-2.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:49:37.667872Z",
+      "ok": true
+    },
+    {
+      "name": "validation-batch-3",
+      "startedAt": "2026-02-19T12:49:37.667907Z",
+      "commands": [
+        {
+          "command": "navigate",
+          "payload": {
+            "url": "http://127.0.0.1:5173/?case=3",
+            "waitUntil": "load",
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "url": "http://127.0.0.1:5173/?case=3"
+          }
+        },
+        {
+          "command": "webgl-diagnostics",
+          "payload": {
+            "timeoutMs": 5000
+          },
+          "ok": true,
+          "status": 200,
+          "error": null,
+          "errorCode": null,
+          "errorMessage": null,
+          "errorDetails": null,
+          "responseBodySnippet": null,
+          "result": {
+            "readPixelsStatus": "ok",
+            "confidence": "medium",
+            "confidenceReason": "mock-validation-batch",
+            "scene": {
+              "nonBlackRatio": 0.62
+            },
+            "capture": {
+              "nonBlackRatio": 0.58
+            }
+          }
+        }
+      ],
+      "snapshot": {
+        "ok": true,
+        "status": 200,
+        "error": null,
+        "errorCode": null,
+        "errorMessage": null,
+        "errorDetails": null,
+        "responseBodySnippet": null,
+        "payload": {
+          "fullPage": true,
+          "timeoutMs": 15000
+        },
+        "result": {
+          "path": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-terminal-probe-validation-batch-run/snapshot-3.png"
+        }
+      },
+      "compareReference": null,
+      "errors": [],
+      "nextAction": null,
+      "finishedAt": "2026-02-19T12:49:37.689628Z",
+      "ok": true
+    }
+  ],
+  "blackScreenVerdict": {
+    "status": "no-black-screen-evidence",
+    "confidence": "high",
+    "sourceOfTruth": "screenshot-metrics-plus-runtime-errors",
+    "rationale": "Screenshot metrics indicate non-black frames and no render-error evidence.",
+    "evidence": {
+      "screenshotBlackScenarios": [],
+      "screenshotNonBlackScenarios": [
+        "validation-batch-1",
+        "validation-batch-2",
+        "validation-batch-3"
+      ],
+      "framebufferBlackScenarios": [],
+      "framebufferMetricMismatches": [],
+      "blackFrameCandidates": [],
+      "runtimeRenderErrorScenarios": []
+    }
+  },
+  "nextAction": null,
+  "warnings": []
+}

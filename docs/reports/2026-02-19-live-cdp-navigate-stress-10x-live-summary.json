@@ -1,0 +1,49 @@
+{
+  "runs": [
+    {
+      "name": "run-1",
+      "ok": true,
+      "scenarioCount": 10,
+      "failedScenarioCount": 0,
+      "runtimeJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-live-cdp-navigate-stress-10x-fresh-agent-run/runtime.json",
+      "metricsJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-live-cdp-navigate-stress-10x-fresh-agent-run/metrics.json",
+      "summaryJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-live-cdp-navigate-stress-10x-fresh-agent-run/summary.json",
+      "sessionLifecycle": {
+        "ensureAttempts": 1,
+        "firstEnsureAttemptSucceeded": true,
+        "fallbackUsed": true,
+        "fallbackActionsUsed": [
+          "preflight-resolve-target-from-cdp-list"
+        ],
+        "attachBranch": "preflight-resolve-target-from-cdp-list"
+      },
+      "blackScreenVerdictStatus": "no-black-screen-evidence"
+    },
+    {
+      "name": "run-2",
+      "ok": true,
+      "scenarioCount": 10,
+      "failedScenarioCount": 0,
+      "runtimeJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-live-cdp-navigate-stress-10x-fresh-agent-run-2/runtime.json",
+      "metricsJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-live-cdp-navigate-stress-10x-fresh-agent-run-2/metrics.json",
+      "summaryJsonPath": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/docs/reports/2026-02-19-live-cdp-navigate-stress-10x-fresh-agent-run-2/summary.json",
+      "sessionLifecycle": {
+        "ensureAttempts": 1,
+        "firstEnsureAttemptSucceeded": true,
+        "fallbackUsed": true,
+        "fallbackActionsUsed": [
+          "preflight-resolve-target-from-cdp-list"
+        ],
+        "attachBranch": "preflight-resolve-target-from-cdp-list"
+      },
+      "blackScreenVerdictStatus": "no-black-screen-evidence"
+    }
+  ],
+  "aggregate": {
+    "totalScenarios": 20,
+    "totalFailedScenarios": 0,
+    "readyStateClosedErrorCount": 0,
+    "readyStateClosedMatches": [],
+    "passRate": 100.0
+  }
+}

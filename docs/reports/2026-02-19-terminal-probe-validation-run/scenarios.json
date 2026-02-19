@@ -1,0 +1,17 @@
+[
+  {
+    "name": "validation-baseline",
+    "commands": [
+      {
+        "do": "navigate",
+        "url": "http://127.0.0.1:5173/",
+        "timeoutMs": 5000
+      },
+      {
+        "do": "webgl-diagnostics",
+        "timeoutMs": 5000
+      }
+    ],
+    "fullPage": true
+  }
+]

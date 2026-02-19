@@ -1,0 +1,217 @@
+{
+  "generatedAt": "2026-02-19T12:57:32.902514Z",
+  "sessionId": "f4c3efe8-dfd0-4ba7-ab5a-fd83829ecb7c",
+  "scenarioCount": 10,
+  "scenarios": [
+    {
+      "name": "navigate-cycle-01",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-02",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-03",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-04",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-05",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-06",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-07",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-08",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-09",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    },
+    {
+      "name": "navigate-cycle-10",
+      "ok": false,
+      "snapshotPath": null,
+      "referenceImagePath": null,
+      "imageMetrics": {
+        "ok": false,
+        "tool": "/opt/homebrew/bin/magick",
+        "reason": "Snapshot path unavailable",
+        "mean": null,
+        "stddev": null,
+        "nonBlackRatio": null,
+        "nonBlackPercent": null
+      },
+      "framebufferNonBlackRatio": null,
+      "compareMetrics": null,
+      "compareArtifacts": null,
+      "errors": [
+        "Scenario command 'navigate' failed [VALIDATION_ERROR]: Command failed"
+      ]
+    }
+  ]
+}

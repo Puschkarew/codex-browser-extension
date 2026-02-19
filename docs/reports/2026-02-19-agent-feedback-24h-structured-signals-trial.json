@@ -1,0 +1,161 @@
+{
+  "schemaVersion": "2026-02-18-feedback-signals-v1",
+  "promotionRules": {
+    "probableSignalPolicy": {
+      "definition": "signalType=inferred or confidence=low",
+      "minDistinctSessionsForBacklog": 2,
+      "appliesTo": [
+        "p1",
+        "p2"
+      ]
+    }
+  },
+  "generatedAt": "2026-02-19T12:42:45.740Z",
+  "windowHours": 24,
+  "windowStartUtc": "2026-02-18T12:42:45.740Z",
+  "windowEndUtc": "2026-02-19T12:42:45.740Z",
+  "targets": [
+    "browser-debug",
+    "fix-app-bugs"
+  ],
+  "scannedFiles": 6,
+  "relevantSessions": 5,
+  "workspaceCounts": [
+    {
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "count": 3
+    },
+    {
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+      "count": 2
+    }
+  ],
+  "sessions": [
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl",
+      "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+      "relevantHits": 18,
+      "issueHits": 2
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T18-29-49-019c715f-3146-7b93-8496-53638d5e17c9.jsonl",
+      "sessionId": "019c715f-3146-7b93-8496-53638d5e17c9",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 6,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T19-49-57-019c71a8-8c3e-7ec2-adb7-8eaab23f0882.jsonl",
+      "sessionId": "019c71a8-8c3e-7ec2-adb7-8eaab23f0882",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 4,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T20-17-36-019c71c1-def5-7072-9efa-eec0d744759e.jsonl",
+      "sessionId": "019c71c1-def5-7072-9efa-eec0d744759e",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+      "relevantHits": 16,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/19/rollout-2026-02-19T14-54-30-019c75c0-6a4d-7c00-a780-b515ec2a03d3.jsonl",
+      "sessionId": "019c75c0-6a4d-7c00-a780-b515ec2a03d3",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 6,
+      "issueHits": 0
+    }
+  ],
+  "issues": [
+    {
+      "id": "appurl_mismatch_terminal_probe",
+      "description": "appUrl mismatch forces terminal-probe fallback",
+      "area": "shared",
+      "signalType": "explicit",
+      "count": 2,
+      "samples": [
+        {
+          "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+          "timestamp": "2026-02-18T15:24:45.244Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl",
+          "snippet": "Реализовано. Ключевые файлы: - `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern/package.json` - `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice"
+        },
+        {
+          "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+          "timestamp": "2026-02-18T15:37:29.841Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl",
+          "snippet": "Использовал **Core mode** (через Browser Debug Core API), не Enhanced. По факту в рамках `fix-app-bugs` были оба подрежима инструментирования: - сначала `terminal-probe` (пока был `appUrl` mismatch), - затем после фикса "
+        }
+      ]
+    }
+  ],
+  "signals": [
+    {
+      "signalId": "signal-1",
+      "issueId": "appurl_mismatch_terminal_probe",
+      "area": "shared",
+      "signalType": "explicit",
+      "confidence": "high",
+      "priorityHint": "p1",
+      "count": 2,
+      "summary": "appUrl mismatch forces terminal-probe fallback",
+      "evidenceRefs": [
+        {
+          "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+          "timestamp": "2026-02-18T15:24:45.244Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl"
+        },
+        {
+          "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+          "timestamp": "2026-02-18T15:37:29.841Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl"
+        }
+      ],
+      "promotion": {
+        "status": "promoted",
+        "probable": false,
+        "reason": "Signal is explicit/non-probable and eligible for backlog.",
+        "minDistinctSessionsRequired": 2,
+        "observedDistinctSessions": 1
+      }
+    }
+  ],
+  "backlogSlice": [
+    {
+      "signalId": "signal-1",
+      "issueId": "appurl_mismatch_terminal_probe",
+      "area": "shared",
+      "signalType": "explicit",
+      "confidence": "high",
+      "priorityHint": "p1",
+      "count": 2,
+      "summary": "appUrl mismatch forces terminal-probe fallback",
+      "evidenceRefs": [
+        {
+          "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+          "timestamp": "2026-02-18T15:24:45.244Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl"
+        },
+        {
+          "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+          "timestamp": "2026-02-18T15:37:29.841Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl"
+        }
+      ],
+      "promotion": {
+        "status": "promoted",
+        "probable": false,
+        "reason": "Signal is explicit/non-probable and eligible for backlog.",
+        "minDistinctSessionsRequired": 2,
+        "observedDistinctSessions": 1
+      }
+    }
+  ]
+}
