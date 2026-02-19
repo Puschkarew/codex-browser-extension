@@ -47,6 +47,9 @@
       .status-bad {
         color: var(--danger);
       }
+      .status-warn {
+        color: #d9480f;
+      }
       .actions {
         display: flex;
         gap: 8px;
@@ -84,6 +87,8 @@
         <div class="row"><strong>App URL:</strong> <span id="app">-</span></div>
         <div class="row"><strong>Session:</strong> <span id="session">-</span></div>
         <div class="row"><strong>Domain:</strong> <span id="domain">-</span></div>
+        <div class="row"><strong>Run:</strong> <span id="readiness">-</span></div>
+        <div class="row"><strong>Next:</strong> <span id="nextAction">-</span></div>
         <div class="actions">
           <button id="start">Start</button>
           <button id="stop">Stop</button>

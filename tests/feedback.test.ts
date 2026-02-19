@@ -16,10 +16,22 @@ function writeSessionFile(
     timestamp?: string;
   },
 ): void {
+  writeSessionFileWithMessages(filePath, [messageText], options);
+}
+
+function writeSessionFileWithMessages(
+  filePath: string,
+  messageTexts: string[],
+  options?: {
+    sessionId?: string;
+    cwd?: string;
+    timestamp?: string;
+  },
+): void {
   const sessionId = options?.sessionId ?? "session-1";
   const cwd = options?.cwd ?? "/tmp/workspace";
   const timestamp = options?.timestamp ?? "2026-02-17T12:00:00.000Z";
-  const lines = [
+  const lines: string[] = [
     JSON.stringify({
       type: "session_meta",
       payload: {
@@ -27,16 +39,20 @@ function writeSessionFile(
         cwd,
       },
     }),
-    JSON.stringify({
-      timestamp,
-      type: "response_item",
-      payload: {
-        role: "assistant",
-        type: "message",
-        content: [{ text: messageText }],
-      },
-    }),
   ];
+  for (const messageText of messageTexts) {
+    lines.push(
+      JSON.stringify({
+        timestamp,
+        type: "response_item",
+        payload: {
+          role: "assistant",
+          type: "message",
+          content: [{ text: messageText }],
+        },
+      }),
+    );
+  }
   fs.writeFileSync(filePath, `${lines.join("\n")}\n`, "utf8");
 }
 
@@ -230,6 +246,50 @@ describe("agent:feedback", () => {
     expect(inferredSignal?.promotion.status).toBe("promoted");
     expect(inferredSignal?.promotion.probable).toBe(true);
     expect(inferredSignal?.promotion.observedDistinctSessions).toBe(2);
+    expect(payload.backlogSlice.some((signal) => signal.issueId === "cleanup_strict_iteration_cost")).toBe(true);
+  });
+
+  it("uses distinct-session recurrence for promotion even when evidence samples are capped", async () => {
+    const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-"));
+    tempDirs.push(codexHome);
+
+    const sessionDir = path.join(codexHome, "sessions", "2026", "02", "19");
+    fs.mkdirSync(sessionDir, { recursive: true });
+    const message = "fix-app-bugs iterative flow keeps running cleanup_guarded --strict before each retry";
+
+    writeSessionFileWithMessages(path.join(sessionDir, "session-a.jsonl"), [message, message, message], {
+      sessionId: "session-a",
+    });
+    writeSessionFile(path.join(sessionDir, "session-b.jsonl"), message, { sessionId: "session-b" });
+
+    const { stdout } = await execFileAsync(
+      path.join(process.cwd(), "node_modules", ".bin", "tsx"),
+      ["src/cli/feedback.ts", "--window", "24h", "--targets", "fix-app-bugs", "--json"],
+      {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          CODEX_HOME: codexHome,
+        },
+      },
+    );
+
+    const payload = JSON.parse(stdout) as {
+      signals: Array<{
+        issueId: string;
+        promotion: { status: string; probable: boolean; observedDistinctSessions: number };
+        evidenceRefs: Array<{ sessionId: string | null }>;
+      }>;
+      backlogSlice: Array<{ issueId: string }>;
+    };
+
+    const inferredSignal = payload.signals.find((signal) => signal.issueId === "cleanup_strict_iteration_cost");
+    expect(inferredSignal).toBeTruthy();
+    expect(inferredSignal?.promotion.status).toBe("promoted");
+    expect(inferredSignal?.promotion.probable).toBe(true);
+    expect(inferredSignal?.promotion.observedDistinctSessions).toBe(2);
+    expect(inferredSignal?.evidenceRefs.length).toBe(3);
+    expect(inferredSignal?.evidenceRefs.every((ref) => ref.sessionId === "session-a")).toBe(true);
     expect(payload.backlogSlice.some((signal) => signal.issueId === "cleanup_strict_iteration_cost")).toBe(true);
   });
 });

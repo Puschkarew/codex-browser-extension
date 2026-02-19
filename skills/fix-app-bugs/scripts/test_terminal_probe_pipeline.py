@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+import runpy
 import subprocess
 import tempfile
 import threading
@@ -502,6 +503,13 @@ def main() -> int:
         assert "Invalid payload for evaluate" in command_entry["errorMessage"], command_entry
         assert isinstance(command_entry["responseBodySnippet"], str) and command_entry["responseBodySnippet"], command_entry
         assert "[VALIDATION_ERROR]" in runtime_fail["scenarios"][0]["errors"][0], runtime_fail
+
+        constants = runpy.run_path(str(SCRIPT_PATH), run_name="terminal_probe_pipeline_constants")
+        retry_exact_command = constants["PIPELINE_RETRY_EXACT_COMMAND"]
+        assert isinstance(retry_exact_command, str), retry_exact_command
+        assert "--tab-url-match-strategy exact" in retry_exact_command, retry_exact_command
+        assert retry_exact_command.count("--tab-url-match-strategy") == 1, retry_exact_command
+        assert "--tab-url-match-strategy origin-path" not in retry_exact_command, retry_exact_command
 
     print("terminal_probe_pipeline smoke checks passed")
     return 0

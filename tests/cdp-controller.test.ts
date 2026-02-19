@@ -134,6 +134,33 @@ describe("CdpController commands", () => {
     expect(evaluateCalls).toBeGreaterThan(0);
   });
 
+  it("navigate drains pending loadEvent rejection when navigate fails early", async () => {
+    const unhandled: unknown[] = [];
+    const handleUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", handleUnhandled);
+
+    const controller = createFakeController(
+      { result: { value: "complete" } },
+      {
+        loadEventFired: async () =>
+          new Promise((_resolve, reject) => {
+            setTimeout(() => reject(new Error("load-event failure")), 0);
+          }),
+        navigate: async () => {
+          throw new Error("navigate failure");
+        },
+      },
+    );
+
+    await expect(controller.navigate("http://localhost:3000/page", 100)).rejects.toThrow("navigate failure");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    process.off("unhandledRejection", handleUnhandled);
+
+    expect(unhandled).toEqual([]);
+  });
+
   it("returns evaluated diagnostics object when CDP connection is present", async () => {
     const controller = createFakeController({
       result: {

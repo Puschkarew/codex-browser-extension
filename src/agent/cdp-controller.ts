@@ -133,6 +133,11 @@ export class CdpController {
       await client.Page.reload({ ignoreCache: false });
       await this.waitForNavigationCompletion(client, loadEvent, timeoutMs);
     } catch (error) {
+      if (loadEvent) {
+        // Reload can fail before waitForNavigationCompletion consumes loadEvent.
+        // Drain pending rejection to avoid process-level unhandledRejection noise.
+        void loadEvent.catch(() => undefined);
+      }
       throw error;
     }
     return { ok: true };
@@ -146,6 +151,11 @@ export class CdpController {
       await client.Page.navigate({ url });
       await this.waitForNavigationCompletion(client, loadEvent, timeoutMs);
     } catch (error) {
+      if (loadEvent) {
+        // Navigate can fail before waitForNavigationCompletion consumes loadEvent.
+        // Drain pending rejection to avoid process-level unhandledRejection noise.
+        void loadEvent.catch(() => undefined);
+      }
       throw error;
     }
     return { ok: true, url };

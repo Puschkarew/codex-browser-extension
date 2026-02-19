@@ -4,6 +4,8 @@ const project = document.getElementById("project");
 const app = document.getElementById("app");
 const session = document.getElementById("session");
 const domain = document.getElementById("domain");
+const readiness = document.getElementById("readiness");
+const nextAction = document.getElementById("nextAction");
 const errorEl = document.getElementById("error");
 
 function render(status) {
@@ -15,6 +17,20 @@ function render(status) {
   app.textContent = status.appUrl ?? "-";
   session.textContent = status.sessionId ?? "-";
   domain.textContent = status.currentDomain ?? "-";
+  if (status.runReadinessStatus) {
+    const modeSuffix = status.runReadinessMode ? ` (${status.runReadinessMode})` : "";
+    readiness.textContent = `${status.runReadinessStatus}${modeSuffix}`;
+    readiness.className =
+      status.runReadinessStatus === "runnable"
+        ? "status-ok"
+        : status.runReadinessStatus === "fallback"
+          ? "status-warn"
+          : "status-bad";
+  } else {
+    readiness.textContent = "-";
+    readiness.className = "";
+  }
+  nextAction.textContent = status.runReadinessNextAction ?? status.runReadinessSummary ?? "-";
   errorEl.textContent = status.lastError ?? "";
 }
 
@@ -34,6 +50,10 @@ async function refresh() {
       appUrl: null,
       sessionId: null,
       currentDomain: null,
+      runReadinessStatus: null,
+      runReadinessMode: null,
+      runReadinessSummary: null,
+      runReadinessNextAction: null,
       lastError: String(error),
     });
   }

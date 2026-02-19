@@ -15,6 +15,11 @@ const state = {
   cdpPort: 9222,
   allowedDomains: ["localhost", "127.0.0.1"],
   captureRules: [],
+  runReadinessStatus: null,
+  runReadinessMode: null,
+  runReadinessSummary: null,
+  runReadinessNextAction: null,
+  runReadinessCommand: null,
 };
 
 function generateCoreBaseCandidates() {
@@ -45,6 +50,17 @@ function hostnameAllowed(hostname, patterns) {
 function updateState(patch) {
   Object.assign(state, patch);
   chrome.runtime.sendMessage({ type: "status-updated", status: state }).catch(() => undefined);
+}
+
+function runReadinessPatchFromHealth(health) {
+  const runReadiness = health?.runReadiness ?? null;
+  return {
+    runReadinessStatus: runReadiness?.status ?? null,
+    runReadinessMode: runReadiness?.modeHint ?? null,
+    runReadinessSummary: runReadiness?.summary ?? null,
+    runReadinessNextAction: runReadiness?.nextAction?.hint ?? null,
+    runReadinessCommand: runReadiness?.nextAction?.command ?? null,
+  };
 }
 
 async function getStoredRuntime() {
@@ -110,6 +126,7 @@ async function resolveCoreBase(forceScan = false) {
           connected: true,
           coreBaseUrl: candidate,
           lastError: null,
+          ...runReadinessPatchFromHealth(health),
         });
 
         return { coreBaseUrl: candidate, health };
@@ -123,6 +140,11 @@ async function resolveCoreBase(forceScan = false) {
     connected: false,
     coreBaseUrl: null,
     lastError: "Agent unavailable",
+    runReadinessStatus: null,
+    runReadinessMode: null,
+    runReadinessSummary: null,
+    runReadinessNextAction: null,
+    runReadinessCommand: null,
   });
 
   return null;
@@ -165,6 +187,7 @@ async function syncRuntimeConfig(forceScan = false) {
     allowedDomains,
     captureRules,
     lastError: null,
+    ...runReadinessPatchFromHealth(resolved.health),
   });
 
   await setStoredRuntime({
@@ -211,6 +234,7 @@ async function startSession() {
     currentDomain: parsed.hostname,
     lastError: null,
   });
+  void syncRuntimeConfig(true).catch(() => undefined);
 
   return payload;
 }
@@ -231,6 +255,7 @@ async function stopSession() {
     currentDomain: null,
     lastError: null,
   });
+  void syncRuntimeConfig(true).catch(() => undefined);
 
   return payload;
 }

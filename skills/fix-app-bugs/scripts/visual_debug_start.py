@@ -27,6 +27,10 @@ from urllib.request import Request, urlopen
 
 RECOVERY_TIMEOUT_SECONDS = 5.0
 DEFAULT_TAB_URL_MATCH_STRATEGY = "origin-path"
+MUTUALLY_EXCLUSIVE_FLAGS = {
+    "--open-tab-if-missing": "--no-open-tab-if-missing",
+    "--no-open-tab-if-missing": "--open-tab-if-missing",
+}
 
 
 def as_string(value: Any) -> Optional[str]:
@@ -285,6 +289,9 @@ def build_readiness_verdict(mode: str, readiness: Dict[str, Any], next_actions: 
 def build_resume_variant_command(base_args: List[str], extra_flags: List[str]) -> str:
     variant = list(base_args)
     for flag in extra_flags:
+        opposite = MUTUALLY_EXCLUSIVE_FLAGS.get(flag)
+        if opposite:
+            variant = [arg for arg in variant if arg != opposite]
         if flag not in variant:
             variant.append(flag)
     return shell_join(variant)

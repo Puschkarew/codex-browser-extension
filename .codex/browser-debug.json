@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "projectId": "browser-extension",
+  "appUrl": "http://127.0.0.1:5173",
+  "agent": {
+    "host": "127.0.0.1",
+    "corePort": 4678,
+    "debugPort": 7331
+  },
+  "browser": {
+    "cdpPort": 9222
+  },
+  "capture": {
+    "allowedDomains": [
+      "localhost",
+      "127.0.0.1"
+    ],
+    "networkAllowlist": []
+  },
+  "defaults": {
+    "queryWindowMinutes": 30
+  }
+}

@@ -37,7 +37,10 @@ PIPELINE_RETRY_BASE_COMMAND = (
     "--tab-url-match-strategy origin-path --scenarios <scenarios.json> --json"
 )
 PIPELINE_RETRY_FORCE_RECOVERY_COMMAND = f"{PIPELINE_RETRY_BASE_COMMAND} --force-new-session --open-tab-if-missing"
-PIPELINE_RETRY_EXACT_COMMAND = f"{PIPELINE_RETRY_BASE_COMMAND} --tab-url-match-strategy exact --no-open-tab-if-missing"
+PIPELINE_RETRY_EXACT_COMMAND = (
+    f"{PIPELINE_RETRY_BASE_COMMAND.replace('--tab-url-match-strategy origin-path', '--tab-url-match-strategy exact')}"
+    " --no-open-tab-if-missing"
+)
 PIPELINE_RETRY_TIMEOUT_COMMAND = f"{PIPELINE_RETRY_FORCE_RECOVERY_COMMAND} --timeout-ms 30000"
 SESSION_START_COMMAND = "npm run agent:session -- --tab-url <url> --match-strategy origin-path"
 SESSION_RESTART_COMMAND = f"npm run agent:stop && {SESSION_START_COMMAND}"

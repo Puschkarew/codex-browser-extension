@@ -506,7 +506,7 @@ def main() -> int:
             project_root,
             bootstrap_recovery_without_flag,
             terminal_probe_ok,
-            extra_args=["--skip-terminal-probe"],
+            extra_args=["--skip-terminal-probe", "--no-open-tab-if-missing"],
         )
         assert completed_no_recovery.returncode == 1, completed_no_recovery
         assert payload_no_recovery["recovery"]["attempted"] is False, payload_no_recovery
@@ -515,6 +515,13 @@ def main() -> int:
         assert payload_no_recovery["recoveryLane"]["actions"][0]["id"] == "soft-recovery", payload_no_recovery
         assert payload_no_recovery["recoveryLane"]["actions"][1]["id"] == "force-new-session", payload_no_recovery
         assert payload_no_recovery["recoveryLane"]["actions"][2]["id"] == "open-tab-recovery", payload_no_recovery
+        soft_command = payload_no_recovery["recoveryLane"]["actions"][0]["command"]
+        force_command = payload_no_recovery["recoveryLane"]["actions"][1]["command"]
+        open_tab_command = payload_no_recovery["recoveryLane"]["actions"][2]["command"]
+        assert "--no-open-tab-if-missing" in soft_command, payload_no_recovery
+        assert "--no-open-tab-if-missing" in force_command, payload_no_recovery
+        assert "--open-tab-if-missing" in open_tab_command, payload_no_recovery
+        assert "--no-open-tab-if-missing" not in open_tab_command, payload_no_recovery
         assert payload_no_recovery["nextActions"][0].startswith("Soft session recovery: "), payload_no_recovery
         no_recovery_counter = int((bootstrap_recovery_without_flag.with_suffix(".count")).read_text(encoding="utf-8").strip())
         assert no_recovery_counter == 1, no_recovery_counter

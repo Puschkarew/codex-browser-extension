@@ -304,9 +304,12 @@ function countDistinctSessionsForSignal(signal: StructuredSignal): number {
   return seen.size;
 }
 
-function buildSignalPromotion(signal: StructuredSignal): SignalPromotion {
+function buildSignalPromotion(
+  signal: StructuredSignal,
+  observedDistinctSessionsOverride?: number,
+): SignalPromotion {
   const probable = isProbableSignal(signal);
-  const observedDistinctSessions = countDistinctSessionsForSignal(signal);
+  const observedDistinctSessions = observedDistinctSessionsOverride ?? countDistinctSessionsForSignal(signal);
   if (
     probable &&
     (signal.priorityHint === "p1" || signal.priorityHint === "p2") &&
@@ -332,18 +335,28 @@ function buildSignalPromotion(signal: StructuredSignal): SignalPromotion {
   };
 }
 
-function applyPromotionRules(signals: StructuredSignal[]): {
+function applyPromotionRules(
+  signals: StructuredSignal[],
+  distinctEvidenceByIssueId?: Map<string, Set<string>>,
+): {
   signals: StructuredSignal[];
   backlogSlice: StructuredSignal[];
 } {
   const withPromotion = signals.map((signal) => ({
     ...signal,
-    promotion: buildSignalPromotion(signal),
+    promotion: buildSignalPromotion(signal, distinctEvidenceByIssueId?.get(signal.issueId)?.size),
   }));
   return {
     signals: withPromotion,
     backlogSlice: withPromotion.filter((signal) => signal.promotion.status === "promoted"),
   };
+}
+
+function buildDistinctEvidenceKey(sample: IssueSample): string {
+  if (sample.sessionId && sample.sessionId.length > 0) {
+    return `session:${sample.sessionId}`;
+  }
+  return `file:${sample.filePath}`;
 }
 
 function buildStructuredSignals(issues: IssueAggregate[]): StructuredSignal[] {
@@ -387,6 +400,7 @@ async function analyzeSessionFile(
   filePath: string,
   targetPattern: RegExp,
   issuesById: Map<string, IssueAggregate>,
+  distinctEvidenceByIssueId: Map<string, Set<string>>,
 ): Promise<SessionSummary> {
   let sessionId: string | null = null;
   let workspace: string | null = null;
@@ -461,13 +475,18 @@ async function analyzeSessionFile(
         continue;
       }
       aggregate.count += 1;
-      pushIssueSample(aggregate, {
+      const sample: IssueSample = {
         sessionId,
         timestamp: typeof record.timestamp === "string" ? record.timestamp : null,
         workspace,
         filePath,
         snippet: text.slice(0, 220),
-      });
+      };
+      pushIssueSample(aggregate, sample);
+      const distinctEvidence = distinctEvidenceByIssueId.get(issue.id);
+      if (distinctEvidence) {
+        distinctEvidence.add(buildDistinctEvidenceKey(sample));
+      }
     }
   }
 
@@ -578,6 +597,7 @@ async function main(): Promise<void> {
 
   const files = await collectRecentSessionFiles(windowHours);
   const issuesById = new Map<string, IssueAggregate>();
+  const distinctEvidenceByIssueId = new Map<string, Set<string>>();
   for (const definition of ISSUE_DEFINITIONS) {
     issuesById.set(definition.id, {
       id: definition.id,
@@ -587,11 +607,12 @@ async function main(): Promise<void> {
       count: 0,
       samples: [],
     });
+    distinctEvidenceByIssueId.set(definition.id, new Set<string>());
   }
 
   const sessions: SessionSummary[] = [];
   for (const filePath of files) {
-    sessions.push(await analyzeSessionFile(filePath, targetPattern, issuesById));
+    sessions.push(await analyzeSessionFile(filePath, targetPattern, issuesById, distinctEvidenceByIssueId));
   }
 
   const relevantSessions = sessions.filter((session) => session.relevantHits > 0 || session.issueHits > 0);
@@ -633,7 +654,7 @@ async function main(): Promise<void> {
       b.count - a.count ||
       a.issueId.localeCompare(b.issueId),
   );
-  const promotedSignals = applyPromotionRules(sortedSignals);
+  const promotedSignals = applyPromotionRules(sortedSignals, distinctEvidenceByIssueId);
   report.signals = promotedSignals.signals;
   report.backlogSlice = promotedSignals.backlogSlice;
 

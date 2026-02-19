@@ -158,14 +158,14 @@ Reason:
 - Keep structured signals privacy-safe (no raw sensitive payloads in shared analytics output).
 
 ## Acceptance Criteria
-- [ ] Canonical readiness verdict vocabulary is documented and mapped across plugin, runtime `/health`, and starter output.
-- [ ] Plugin popup/extension state exposes a decision-ready summary and clear next-action hint.
-- [ ] Guided recovery precedence is documented and reflected consistently in starter/pipeline usage guidance.
-- [ ] Fallback safety invariant is preserved (`terminal-probe` path never introduces browser-side `fetch(debugEndpoint)`).
-- [ ] Shared feedback schema supports explicit classification into `plugin`, `skill`, and `shared` with confidence level.
-- [ ] One trial feedback cycle can produce an actionable backlog slice using the new schema.
-- [ ] Regression coverage exists for new contract surfaces and scoped feedback behavior.
-- [ ] Documentation updates remain aligned across `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/README.md`, `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/README-debug.md`, and `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/AGENTS.md`.
+- [x] Canonical readiness verdict vocabulary is documented and mapped across plugin, runtime `/health`, and starter output.
+- [x] Plugin popup/extension state exposes a decision-ready summary and clear next-action hint.
+- [x] Guided recovery precedence is documented and reflected consistently in starter/pipeline usage guidance.
+- [x] Fallback safety invariant is preserved (`terminal-probe` path never introduces browser-side `fetch(debugEndpoint)`).
+- [x] Shared feedback schema supports explicit classification into `plugin`, `skill`, and `shared` with confidence level.
+- [x] One trial feedback cycle can produce an actionable backlog slice using the new schema.
+- [x] Regression coverage exists for new contract surfaces and scoped feedback behavior.
+- [x] Documentation updates remain aligned across `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/README.md`, `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/README-debug.md`, and `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension/AGENTS.md`.
 
 ## Success Metrics
 - Reduce average retries before first successful scenario launch by >=30% over first 20 collaboration-focused runs.
@@ -185,36 +185,36 @@ Reason:
 
 ## Implementation Outline
 ### Phase 1: Readiness Contract Unification (P0)
-- [ ] Define canonical verdict and next-action schema.
-- [ ] Map existing runtime/starter fields to the canonical schema.
-- [ ] Document contract table and backward compatibility behavior.
+- [x] Define canonical verdict and next-action schema.
+- [x] Map existing runtime/starter fields to the canonical schema.
+- [x] Document contract table and backward compatibility behavior.
 
 ### Phase 2: Plugin and Workflow Surface Alignment (P1)
-- [ ] Update plugin status presentation expectations and wording contract.
-- [ ] Align starter/workflow guidance to the same readiness vocabulary.
-- [ ] Validate no semantic conflicts across docs and operator commands.
+- [x] Update plugin status presentation expectations and wording contract.
+- [x] Align starter/workflow guidance to the same readiness vocabulary.
+- [x] Validate no semantic conflicts across docs and operator commands.
 
 ### Phase 3: Guided Recovery Lane (P1)
-- [ ] Define recovery precedence (soft recovery, force-new-session, open-tab-if-missing).
-- [ ] Publish one deterministic recovery decision path for common failure classes.
-- [ ] Add regression checks around recovery classification and expected next actions.
+- [x] Define recovery precedence (soft recovery, force-new-session, open-tab-if-missing).
+- [x] Publish one deterministic recovery decision path for common failure classes.
+- [x] Add regression checks around recovery classification and expected next actions.
 
 ### Phase 4: Structured Feedback Loop (P2)
-- [ ] Define minimal structured signal schema for shared prioritization.
-- [ ] Run one full-cycle audit and evaluate signal quality.
-- [ ] Decide whether to keep manual cadence or automate recurring collection.
+- [x] Define minimal structured signal schema for shared prioritization.
+- [x] Run one full-cycle audit and evaluate signal quality.
+- [x] Decide whether to keep manual cadence or automate recurring collection.
 
 ## Validation Strategy
-- [ ] Capture routing trace fields in rollout notes:
+- [x] Capture routing trace fields in rollout notes:
   - `triggerMatched=false`
   - `ruleId=R5-NO-ROUTE`
   - `modeSelected=core`
   - `fallbackUsed=false`
   - `killSwitchState=enabled`
-- [ ] Verify fallback invariants with existing tests and contract checks.
-- [ ] Verify feedback scope tests still pass with new schema fields.
-- [ ] Verify docs and mirrors are synchronized where required.
-- [ ] Run one end-to-end dry run of the new collaboration loop and record decision latency + retry count.
+- [x] Verify fallback invariants with existing tests and contract checks.
+- [x] Verify feedback scope tests still pass with new schema fields.
+- [x] Verify docs and mirrors are synchronized where required.
+- [x] Run one end-to-end dry run of the new collaboration loop and record decision latency + retry count.
 
 ## AI-Era Notes
 - Collaboration quality depends on explicit machine contracts and low-ambiguity operator messaging, not on adding more ad-hoc diagnostics.

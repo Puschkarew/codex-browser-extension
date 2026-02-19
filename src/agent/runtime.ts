@@ -22,7 +22,7 @@ import {
   WaitPayloadSchema,
   WebglDiagnosticsPayloadSchema,
 } from "../shared/contracts.js";
-import type { CompareDimensionPolicy, ResizeInterpolation, SessionMatchStrategy } from "../shared/contracts.js";
+import type { CompareDimensionPolicy, CommandRequest, ResizeInterpolation, SessionMatchStrategy } from "../shared/contracts.js";
 import { AmbiguousTargetError, CdpController, CdpUnavailableError, CommandTimeoutError, TargetNotFoundError } from "./cdp-controller.js";
 import { isAllowedHostname, isAllowedOrigin } from "./domain-match.js";
 import { compareImages, ImageCompareError } from "./image-compare.js";
@@ -66,6 +66,34 @@ type HealthResponse = {
     cdpReason: string | null;
     cdpPort: number;
   };
+  runReadiness: {
+    status: "runnable" | "fallback" | "blocked";
+    modeHint: "core" | "terminal-probe";
+    reasons: string[];
+    summary: string;
+    nextAction: {
+      label: string;
+      hint: string;
+      command: string | null;
+    } | null;
+  };
+};
+
+type SessionSummary = {
+  sessionId: string;
+  state: string;
+  tabUrl: string;
+  startedAt: string;
+};
+
+type RunReadinessInput = {
+  appUrl: string;
+  appUrlDrift: HealthResponse["appUrlDrift"];
+  cdpReadiness: {
+    ok: boolean;
+    reason: string | null;
+  };
+  activeSession: false | SessionSummary;
 };
 
 function sendError(
@@ -170,6 +198,32 @@ function matchesSessionTarget(candidateUrl: string, requestedUrl: string, matchS
   return candidate.origin === requested.origin;
 }
 
+const SAFE_COMMAND_RETRY_SET = new Set<CommandRequest["command"]>([
+  "reload",
+  "wait",
+  "navigate",
+  "snapshot",
+  "webgl-diagnostics",
+]);
+
+const STALE_CDP_ERROR_HINTS = [
+  "websocket",
+  "readystate",
+  "closed",
+  "target closed",
+  "session closed",
+  "cdp client is not attached",
+  "socket hang up",
+  "econnreset",
+];
+
+function errorToMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 export function buildAppUrlDrift(
   configAppUrl: string,
   activeSessionTabUrl: string | null,
@@ -264,6 +318,114 @@ export function buildAppUrlDrift(
     activeOrigin: activeParts.origin,
     reason: `config origin ${configParts.origin} differs from active tab origin ${activeParts.origin}`,
     recommendedCommand,
+  };
+}
+
+function buildStartSessionCommand(appUrl: string): string {
+  return `npm run agent:session -- --tab-url ${shellQuote(appUrl)} --match-strategy origin-path`;
+}
+
+function buildSessionRecoveryCommand(appUrl: string): string {
+  return `npm run agent:stop && ${buildStartSessionCommand(appUrl)}`;
+}
+
+function buildTerminalProbeStarterCommand(appUrl: string): string {
+  return (
+    "python3 \"${CODEX_HOME:-$HOME/.codex}/skills/fix-app-bugs/scripts/visual_debug_start.py\"" +
+    " --project-root <project-root>" +
+    ` --actual-app-url ${shellQuote(appUrl)}` +
+    " --json"
+  );
+}
+
+export function buildRunReadiness(input: RunReadinessInput): HealthResponse["runReadiness"] {
+  if (input.appUrlDrift.status === "invalid-url") {
+    return {
+      status: "blocked",
+      modeHint: "core",
+      reasons: ["app-url-drift:invalid-url"],
+      summary: "Runtime config appUrl is invalid and must be fixed before session actions.",
+      nextAction: null,
+    };
+  }
+
+  if (input.appUrlDrift.status === "mismatch") {
+    return {
+      status: "blocked",
+      modeHint: "core",
+      reasons: ["app-url-drift:mismatch"],
+      summary: "Configured app URL differs from active session URL.",
+      nextAction: {
+        label: "Align app URL",
+        hint: "Apply recommended app-url remediation and re-run readiness checks.",
+        command: input.appUrlDrift.recommendedCommand,
+      },
+    };
+  }
+
+  if (input.activeSession && input.activeSession.state !== "running") {
+    return {
+      status: "blocked",
+      modeHint: "core",
+      reasons: [`session-state:${input.activeSession.state}`],
+      summary: "Active session is not running; session recovery is required.",
+      nextAction: {
+        label: "Recover session",
+        hint: "Stop the current session and ensure a fresh running session.",
+        command: buildSessionRecoveryCommand(input.appUrl),
+      },
+    };
+  }
+
+  if (!input.cdpReadiness.ok) {
+    const reason = input.cdpReadiness.reason ?? "unknown";
+    return {
+      status: "fallback",
+      modeHint: "terminal-probe",
+      reasons: [`cdp-unavailable:${reason}`],
+      summary: "CDP is unavailable; use terminal-probe workflow until CDP recovers.",
+      nextAction: {
+        label: "Run terminal-probe starter",
+        hint: "Continue with guarded starter in terminal-probe path.",
+        command: buildTerminalProbeStarterCommand(input.appUrl),
+      },
+    };
+  }
+
+  if (!input.activeSession) {
+    return {
+      status: "runnable",
+      modeHint: "core",
+      reasons: ["session:none"],
+      summary: "Runtime is healthy; start a session to run commands.",
+      nextAction: {
+        label: "Start session",
+        hint: "Start or ensure a session for the target app URL.",
+        command: buildStartSessionCommand(input.appUrl),
+      },
+    };
+  }
+
+  if (input.appUrlDrift.matchType === "loopback-equivalent") {
+    return {
+      status: "runnable",
+      modeHint: "core",
+      reasons: ["app-url-drift:loopback-equivalent"],
+      summary: "Session is runnable; optional app URL sync can improve deterministic reruns.",
+      nextAction: {
+        label: "Optional app URL sync",
+        hint: "Optionally align config appUrl with active loopback URL.",
+        command: input.appUrlDrift.recommendedCommand,
+      },
+    };
+  }
+
+  return {
+    status: "runnable",
+    modeHint: "core",
+    reasons: [],
+    summary: "Session and CDP are healthy; scenario commands can run.",
+    nextAction: null,
   };
 }
 
@@ -577,6 +739,56 @@ export class AgentRuntime {
     return this.startFreshSession(tabUrl, debugPort, matchStrategy);
   }
 
+  private isSafeCommandForRetry(command: CommandRequest["command"]): boolean {
+    return SAFE_COMMAND_RETRY_SET.has(command);
+  }
+
+  private isLikelyStaleCdpError(error: unknown): boolean {
+    if (error instanceof CommandTimeoutError) {
+      return false;
+    }
+    const message = errorToMessage(error).toLowerCase();
+    return STALE_CDP_ERROR_HINTS.some((hint) => message.includes(hint));
+  }
+
+  private async recoverActiveCommandChannel(): Promise<boolean> {
+    const active = this.sessionManager.getActive();
+    if (!active) {
+      return false;
+    }
+
+    const exactTarget = active.attachedTargetUrl ?? active.tabUrl;
+    const attachAttempts: Array<{ tabUrlPattern: string; matchStrategy: SessionMatchStrategy }> = [
+      { tabUrlPattern: exactTarget, matchStrategy: "exact" },
+    ];
+    if (exactTarget !== active.tabUrl) {
+      attachAttempts.push({ tabUrlPattern: active.tabUrl, matchStrategy: "origin-path" });
+    }
+
+    try {
+      await this.cdpController.detach();
+    } catch {
+      // best-effort cleanup before reattach
+    }
+
+    for (const attempt of attachAttempts) {
+      try {
+        const attachedTargetUrl = await this.cdpController.attach({
+          tabUrlPattern: attempt.tabUrlPattern,
+          debugPort: active.debugPort,
+          matchStrategy: attempt.matchStrategy,
+        });
+        this.sessionManager.markRunning(attachedTargetUrl);
+        return true;
+      } catch {
+        // try the next attach strategy
+      }
+    }
+
+    this.sessionManager.markError();
+    return false;
+  }
+
   private registerCoreRoutes(): void {
     this.coreServer.get("/health", async (): Promise<HealthResponse> => {
       const active = this.sessionManager.getActive();
@@ -584,6 +796,20 @@ export class AgentRuntime {
       const cdpPort = runtimeConfig.browser.cdpPort;
       const cdpReadiness = await this.probeCdpReadiness(cdpPort);
       const appUrlDrift = buildAppUrlDrift(runtimeConfig.appUrl, active?.tabUrl ?? null);
+      const activeSession = active
+        ? {
+            sessionId: active.sessionId,
+            state: active.state,
+            tabUrl: active.tabUrl,
+            startedAt: active.startedAt,
+          }
+        : false;
+      const runReadiness = buildRunReadiness({
+        appUrl: runtimeConfig.appUrl,
+        appUrlDrift,
+        cdpReadiness,
+        activeSession,
+      });
 
       return {
         status: "ok",
@@ -594,14 +820,7 @@ export class AgentRuntime {
         activeProjectId: runtimeConfig.projectId,
         appUrl: runtimeConfig.appUrl,
         appUrlDrift,
-        activeSession: active
-          ? {
-              sessionId: active.sessionId,
-              state: active.state,
-              tabUrl: active.tabUrl,
-              startedAt: active.startedAt,
-            }
-          : false,
+        activeSession,
         readiness: {
           debug: true,
           query: true,
@@ -609,6 +828,7 @@ export class AgentRuntime {
           cdpReason: cdpReadiness.ok ? null : cdpReadiness.reason,
           cdpPort,
         },
+        runReadiness,
       };
     });
 
@@ -814,49 +1034,86 @@ export class AgentRuntime {
           return this.sendSessionNotFound(reply, commandSessionId, "ensure-session");
         }
         if (!this.cdpController.hasConnection()) {
-          return sendError(reply, 503, "CDP_UNAVAILABLE", "No attached CDP target", this.activeSessionDetails(), "ensure-session");
+          const recovered = this.isSafeCommandForRetry(command) ? await this.recoverActiveCommandChannel() : false;
+          if (!recovered) {
+            return sendError(
+              reply,
+              503,
+              "CDP_UNAVAILABLE",
+              "No attached CDP target",
+              this.activeSessionDetails(),
+              "ensure-session",
+            );
+          }
         }
         eventSessionId = commandSessionId;
       }
 
       try {
-        let result: Record<string, unknown> = { ok: true };
+        const executeCommand = async (): Promise<Record<string, unknown>> => {
+          if (command === "reload") {
+            const payload = ReloadPayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.reload(payload.timeoutMs);
+          }
+          if (command === "wait") {
+            const payload = WaitPayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.wait(payload.ms);
+          }
+          if (command === "navigate") {
+            const payload = NavigatePayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.navigate(payload.url, payload.timeoutMs);
+          }
+          if (command === "evaluate") {
+            const payload = EvaluatePayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.evaluate(
+              payload.expression,
+              payload.returnByValue,
+              payload.awaitPromise,
+              payload.timeoutMs,
+            );
+          }
+          if (command === "click") {
+            const payload = ClickPayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.click(payload.selector, payload.timeoutMs);
+          }
+          if (command === "type") {
+            const payload = TypePayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.type(payload.selector, payload.text, payload.clear, payload.timeoutMs);
+          }
+          if (command === "snapshot") {
+            const payload = SnapshotPayloadSchema.parse(parsed.data.payload);
+            const screenshotData = await this.cdpController.snapshot(payload.timeoutMs);
+            const screenshotPath = this.store.saveScreenshot(eventSessionId, screenshotData);
+            return { path: screenshotPath };
+          }
+          if (command === "compare-reference") {
+            const payload = CompareReferencePayloadSchema.parse(parsed.data.payload);
+            return this.runCompareReference(eventSessionId, payload);
+          }
+          if (command === "webgl-diagnostics") {
+            const payload = WebglDiagnosticsPayloadSchema.parse(parsed.data.payload);
+            return this.cdpController.webglDiagnostics(payload.timeoutMs);
+          }
+          return { ok: true };
+        };
 
-        if (command === "reload") {
-          const payload = ReloadPayloadSchema.parse(parsed.data.payload);
-          result = await this.cdpController.reload(payload.timeoutMs);
-        } else if (command === "wait") {
-          const payload = WaitPayloadSchema.parse(parsed.data.payload);
-          result = await this.cdpController.wait(payload.ms);
-        } else if (command === "navigate") {
-          const payload = NavigatePayloadSchema.parse(parsed.data.payload);
-          result = await this.cdpController.navigate(payload.url, payload.timeoutMs);
-        } else if (command === "evaluate") {
-          const payload = EvaluatePayloadSchema.parse(parsed.data.payload);
-          result = await this.cdpController.evaluate(
-            payload.expression,
-            payload.returnByValue,
-            payload.awaitPromise,
-            payload.timeoutMs,
-          );
-        } else if (command === "click") {
-          const payload = ClickPayloadSchema.parse(parsed.data.payload);
-          result = await this.cdpController.click(payload.selector, payload.timeoutMs);
-        } else if (command === "type") {
-          const payload = TypePayloadSchema.parse(parsed.data.payload);
-          result = await this.cdpController.type(payload.selector, payload.text, payload.clear, payload.timeoutMs);
-        } else if (command === "snapshot") {
-          const payload = SnapshotPayloadSchema.parse(parsed.data.payload);
-          const screenshotData = await this.cdpController.snapshot(payload.timeoutMs);
-          const screenshotPath = this.store.saveScreenshot(eventSessionId, screenshotData);
-          result = { path: screenshotPath };
-        } else if (command === "compare-reference") {
-          const payload = CompareReferencePayloadSchema.parse(parsed.data.payload);
-          result = this.runCompareReference(eventSessionId, payload);
-        } else if (command === "webgl-diagnostics") {
-          const payload = WebglDiagnosticsPayloadSchema.parse(parsed.data.payload);
-          const diagnostics = await this.cdpController.webglDiagnostics(payload.timeoutMs);
-          result = diagnostics;
+        let recovery: { attempted: boolean; recovered: boolean } | null = null;
+        let result: Record<string, unknown>;
+        try {
+          result = await executeCommand();
+        } catch (error) {
+          const safeRetry = !isCompareReference && this.isSafeCommandForRetry(command);
+          if (safeRetry && this.isLikelyStaleCdpError(error)) {
+            const recovered = await this.recoverActiveCommandChannel();
+            recovery = { attempted: true, recovered };
+            if (recovered) {
+              result = await executeCommand();
+            } else {
+              throw new CdpUnavailableError(errorToMessage(error));
+            }
+          } else {
+            throw error;
+          }
         }
 
         this.store.appendEvent(
@@ -869,6 +1126,7 @@ export class AgentRuntime {
                 command,
                 payload: parsed.data.payload,
                 result,
+                recovery: recovery ?? undefined,
               },
             },
             eventSessionId,
@@ -887,6 +1145,17 @@ export class AgentRuntime {
 
         if (error instanceof CdpUnavailableError) {
           return sendError(reply, 503, "CDP_UNAVAILABLE", "CDP command failed", { reason: error.message }, "ensure-session");
+        }
+
+        if (this.isLikelyStaleCdpError(error)) {
+          return sendError(
+            reply,
+            503,
+            "CDP_UNAVAILABLE",
+            "CDP command failed",
+            { reason: errorToMessage(error) },
+            "ensure-session",
+          );
         }
 
         return sendError(reply, 422, "VALIDATION_ERROR", "Command failed", { reason: String(error) });

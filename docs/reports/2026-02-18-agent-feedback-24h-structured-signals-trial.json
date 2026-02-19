@@ -1,0 +1,202 @@
+{
+  "schemaVersion": "2026-02-18-feedback-signals-v1",
+  "generatedAt": "2026-02-18T17:13:17.893Z",
+  "windowHours": 24,
+  "windowStartUtc": "2026-02-17T17:13:17.893Z",
+  "windowEndUtc": "2026-02-18T17:13:17.893Z",
+  "targets": [
+    "browser-debug",
+    "fix-app-bugs"
+  ],
+  "scannedFiles": 12,
+  "relevantSessions": 11,
+  "workspaceCounts": [
+    {
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "count": 6
+    },
+    {
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "count": 4
+    },
+    {
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+      "count": 1
+    }
+  ],
+  "sessions": [
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T20-08-35-019c6c93-420a-7d33-9f20-943cd2325241.jsonl",
+      "sessionId": "019c6c93-420a-7d33-9f20-943cd2325241",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "relevantHits": 20,
+      "issueHits": 1
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T20-35-44-019c6cac-1c8b-7761-b194-884ee20ee88a.jsonl",
+      "sessionId": "019c6cac-1c8b-7761-b194-884ee20ee88a",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "relevantHits": 6,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T20-58-13-019c6cc0-b18a-7551-bfe5-385900567784.jsonl",
+      "sessionId": "019c6cc0-b18a-7551-bfe5-385900567784",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "relevantHits": 6,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T21-40-02-019c6ce6-f8e2-7791-abd2-1257bc5023a3.jsonl",
+      "sessionId": "019c6ce6-f8e2-7791-abd2-1257bc5023a3",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "relevantHits": 12,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T21-53-07-019c6cf2-f38b-70e3-9d17-88fcccc231ee.jsonl",
+      "sessionId": "019c6cf2-f38b-70e3-9d17-88fcccc231ee",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "relevantHits": 4,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T21-53-43-019c6cf3-8202-7f72-906f-4f8f8fdbaed1.jsonl",
+      "sessionId": "019c6cf3-8202-7f72-906f-4f8f8fdbaed1",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+      "relevantHits": 7,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl",
+      "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 4,
+      "issueHits": 3
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T10-53-48-019c6fbd-b076-7e93-b43d-48b9bf4197b1.jsonl",
+      "sessionId": "019c6fbd-b076-7e93-b43d-48b9bf4197b1",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 1,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T16-56-41-019c7109-eab0-7d21-9a25-522d08a6b989.jsonl",
+      "sessionId": "019c7109-eab0-7d21-9a25-522d08a6b989",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Ice Cream Pattern",
+      "relevantHits": 18,
+      "issueHits": 2
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T18-29-49-019c715f-3146-7b93-8496-53638d5e17c9.jsonl",
+      "sessionId": "019c715f-3146-7b93-8496-53638d5e17c9",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 6,
+      "issueHits": 0
+    },
+    {
+      "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/18/rollout-2026-02-18T19-49-57-019c71a8-8c3e-7ec2-adb7-8eaab23f0882.jsonl",
+      "sessionId": "019c71a8-8c3e-7ec2-adb7-8eaab23f0882",
+      "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+      "relevantHits": 3,
+      "issueHits": 0
+    }
+  ],
+  "issues": [
+    {
+      "id": "appurl_mismatch_terminal_probe",
+      "description": "appUrl mismatch forces terminal-probe fallback",
+      "area": "shared",
+      "signalType": "explicit",
+      "count": 6,
+      "samples": [
+        {
+          "sessionId": "019c6c93-420a-7d33-9f20-943cd2325241",
+          "timestamp": "2026-02-17T17:20:27.515Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T20-08-35-019c6c93-420a-7d33-9f20-943cd2325241.jsonl",
+          "snippet": "Реализация выполнена по плану. Изменения: - Добавлен блок `Colors` с 3 контролами (`sceneBackgroundColor`, `circleColor`, `iconTintColor`) в `/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Sel"
+        },
+        {
+          "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+          "timestamp": "2026-02-17T19:10:26.429Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl",
+          "snippet": "<proposed_plan> # Delta Plan: закрыть остатки из фидбека 2026-02-17 (strict readiness + recovery + headed evidence) ## Summary Цель этого дельта-цикла: закрыть только незавершённые пункты из фидбека, без редизайна всего "
+        },
+        {
+          "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+          "timestamp": "2026-02-17T19:10:41.259Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl",
+          "snippet": "PLEASE IMPLEMENT THIS PLAN: # Delta Plan: закрыть остатки из фидбека 2026-02-17 (strict readiness + recovery + headed evidence) ## Summary Цель этого дельта-цикла: закрыть только незавершённые пункты из фидбека, без реди"
+        }
+      ]
+    }
+  ],
+  "signals": [
+    {
+      "signalId": "signal-1",
+      "issueId": "appurl_mismatch_terminal_probe",
+      "area": "shared",
+      "signalType": "explicit",
+      "confidence": "high",
+      "priorityHint": "p0",
+      "count": 6,
+      "summary": "appUrl mismatch forces terminal-probe fallback",
+      "evidenceRefs": [
+        {
+          "sessionId": "019c6c93-420a-7d33-9f20-943cd2325241",
+          "timestamp": "2026-02-17T17:20:27.515Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T20-08-35-019c6c93-420a-7d33-9f20-943cd2325241.jsonl"
+        },
+        {
+          "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+          "timestamp": "2026-02-17T19:10:26.429Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl"
+        },
+        {
+          "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+          "timestamp": "2026-02-17T19:10:41.259Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl"
+        }
+      ]
+    }
+  ],
+  "backlogSlice": [
+    {
+      "signalId": "signal-1",
+      "issueId": "appurl_mismatch_terminal_probe",
+      "area": "shared",
+      "signalType": "explicit",
+      "confidence": "high",
+      "priorityHint": "p0",
+      "count": 6,
+      "summary": "appUrl mismatch forces terminal-probe fallback",
+      "evidenceRefs": [
+        {
+          "sessionId": "019c6c93-420a-7d33-9f20-943cd2325241",
+          "timestamp": "2026-02-17T17:20:27.515Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Select Icons",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T20-08-35-019c6c93-420a-7d33-9f20-943cd2325241.jsonl"
+        },
+        {
+          "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+          "timestamp": "2026-02-17T19:10:26.429Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl"
+        },
+        {
+          "sessionId": "019c6cfa-36c5-7551-adaf-d2a712a94305",
+          "timestamp": "2026-02-17T19:10:41.259Z",
+          "workspace": "/Users/vladimirpuskarev/Library/Mobile Documents/com~apple~CloudDocs/Codex/Browser Extension",
+          "filePath": "/Users/vladimirpuskarev/.codex/sessions/2026/02/17/rollout-2026-02-17T22-01-03-019c6cfa-36c5-7551-adaf-d2a712a94305.jsonl"
+        }
+      ]
+    }
+  ]
+}

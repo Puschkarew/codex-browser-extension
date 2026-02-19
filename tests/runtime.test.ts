@@ -140,6 +140,17 @@ describe("AgentRuntime APIs", () => {
         cdpReason: string | null;
         cdpPort: number;
       };
+      runReadiness: {
+        status: string;
+        modeHint: string;
+        reasons: string[];
+        summary: string;
+        nextAction: null | {
+          label: string;
+          hint: string;
+          command: string | null;
+        };
+      };
     };
 
     expect(healthResponse.status).toBe(200);
@@ -155,6 +166,10 @@ describe("AgentRuntime APIs", () => {
     expect(health.readiness.query).toBe(true);
     expect(typeof health.readiness.cdp).toBe("boolean");
     expect(typeof health.readiness.cdpPort).toBe("number");
+    expect(["runnable", "fallback", "blocked"]).toContain(health.runReadiness.status);
+    expect(["core", "terminal-probe"]).toContain(health.runReadiness.modeHint);
+    expect(Array.isArray(health.runReadiness.reasons)).toBe(true);
+    expect(typeof health.runReadiness.summary).toBe("string");
 
     const configResponse = await fetch(`${ctx.coreUrl}/runtime/config`);
     const runtimeConfig = (await configResponse.json()) as {
@@ -257,6 +272,11 @@ describe("AgentRuntime APIs", () => {
         cdpReason: string | null;
         cdpPort: number;
       };
+      runReadiness: {
+        status: string;
+        modeHint: string;
+        reasons: string[];
+      };
     };
 
     expect(healthResponse.status).toBe(200);
@@ -265,6 +285,9 @@ describe("AgentRuntime APIs", () => {
     expect(health.readiness.cdp).toBe(false);
     expect(health.readiness.cdpPort).toBe(65534);
     expect(typeof health.readiness.cdpReason).toBe("string");
+    expect(health.runReadiness.status).toBe("fallback");
+    expect(health.runReadiness.modeHint).toBe("terminal-probe");
+    expect(health.runReadiness.reasons.some((reason) => reason.startsWith("cdp-unavailable:"))).toBe(true);
   });
 
   it("accepts valid BUGFIX_TRACE on /debug and stores queryable event", async () => {
@@ -588,5 +611,173 @@ describe("AgentRuntime APIs", () => {
 
     expect(response.status).toBe(404);
     expect(json.error.code).toBe("SESSION_NOT_FOUND");
+  });
+
+  it("retries reload once after stale CDP channel recovery", async () => {
+    const runtimeAny = ctx.runtime as unknown as {
+      sessionManager: {
+        getActive(): { sessionId: string } | null;
+        startStarting(tabUrl: string, debugPort: number): { sessionId: string };
+        markRunning(attachedTargetUrl: string): { sessionId: string };
+        stop(sessionId: string): unknown;
+      };
+      cdpController: {
+        hasConnection(): boolean;
+        detach(): Promise<void>;
+        attach(options: { tabUrlPattern: string; debugPort: number; matchStrategy: string }): Promise<string>;
+        reload(timeoutMs: number): Promise<{ ok: true }>;
+      };
+    };
+
+    const sessionManager = runtimeAny.sessionManager;
+    const cdpController = runtimeAny.cdpController;
+    const existing = sessionManager.getActive();
+    if (existing) {
+      sessionManager.stop(existing.sessionId);
+    }
+
+    const running = sessionManager.startStarting("http://allowed.local:3000/health", 9222);
+    sessionManager.markRunning("http://allowed.local:3000/health");
+
+    const originalHasConnection = cdpController.hasConnection.bind(cdpController);
+    const originalDetach = cdpController.detach.bind(cdpController);
+    const originalAttach = cdpController.attach.bind(cdpController);
+    const originalReload = cdpController.reload.bind(cdpController);
+
+    let connected = true;
+    let reloadCalls = 0;
+    let detachCalls = 0;
+    let attachCalls = 0;
+    const attachStrategies: string[] = [];
+
+    cdpController.hasConnection = () => connected;
+    cdpController.detach = async () => {
+      detachCalls += 1;
+      connected = false;
+    };
+    cdpController.attach = async (options) => {
+      attachCalls += 1;
+      attachStrategies.push(options.matchStrategy);
+      connected = true;
+      return "http://allowed.local:3000/health";
+    };
+    cdpController.reload = async () => {
+      reloadCalls += 1;
+      if (reloadCalls === 1) {
+        connected = false;
+        throw new Error("WebSocket is not open: readyState 3 (CLOSED)");
+      }
+      return { ok: true };
+    };
+
+    try {
+      const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+        sessionId: running.sessionId,
+        command: "reload",
+        payload: {
+          waitUntil: "load",
+          timeoutMs: 5000,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(json.ok).toBe(true);
+      expect(reloadCalls).toBe(2);
+      expect(detachCalls).toBe(1);
+      expect(attachCalls).toBe(1);
+      expect(attachStrategies).toEqual(["exact"]);
+    } finally {
+      cdpController.hasConnection = originalHasConnection;
+      cdpController.detach = originalDetach;
+      cdpController.attach = originalAttach;
+      cdpController.reload = originalReload;
+      const activeAfter = sessionManager.getActive();
+      if (activeAfter?.sessionId === running.sessionId) {
+        sessionManager.stop(running.sessionId);
+      }
+    }
+  });
+
+  it("does not auto-retry evaluate on stale CDP channel", async () => {
+    const runtimeAny = ctx.runtime as unknown as {
+      sessionManager: {
+        getActive(): { sessionId: string } | null;
+        startStarting(tabUrl: string, debugPort: number): { sessionId: string };
+        markRunning(attachedTargetUrl: string): { sessionId: string };
+        stop(sessionId: string): unknown;
+      };
+      cdpController: {
+        hasConnection(): boolean;
+        detach(): Promise<void>;
+        attach(options: { tabUrlPattern: string; debugPort: number; matchStrategy: string }): Promise<string>;
+        evaluate(
+          expression: string,
+          returnByValue: boolean,
+          awaitPromise: boolean,
+          timeoutMs: number,
+        ): Promise<{ ok: true; value: unknown }>;
+      };
+    };
+
+    const sessionManager = runtimeAny.sessionManager;
+    const cdpController = runtimeAny.cdpController;
+    const existing = sessionManager.getActive();
+    if (existing) {
+      sessionManager.stop(existing.sessionId);
+    }
+
+    const running = sessionManager.startStarting("http://allowed.local:3000/health", 9222);
+    sessionManager.markRunning("http://allowed.local:3000/health");
+
+    const originalHasConnection = cdpController.hasConnection.bind(cdpController);
+    const originalDetach = cdpController.detach.bind(cdpController);
+    const originalAttach = cdpController.attach.bind(cdpController);
+    const originalEvaluate = cdpController.evaluate.bind(cdpController);
+
+    let connected = true;
+    let evaluateCalls = 0;
+    let attachCalls = 0;
+
+    cdpController.hasConnection = () => connected;
+    cdpController.detach = async () => {
+      connected = false;
+    };
+    cdpController.attach = async () => {
+      attachCalls += 1;
+      connected = true;
+      return "http://allowed.local:3000/health";
+    };
+    cdpController.evaluate = async () => {
+      evaluateCalls += 1;
+      connected = false;
+      throw new Error("WebSocket is not open: readyState 3 (CLOSED)");
+    };
+
+    try {
+      const { response, json } = await postJson(`${ctx.coreUrl}/command`, {
+        sessionId: running.sessionId,
+        command: "evaluate",
+        payload: {
+          expression: "window.location.href",
+          returnByValue: true,
+          awaitPromise: true,
+          timeoutMs: 5000,
+        },
+      });
+
+      expect(response.status).toBe(503);
+      expect(json.error.code).toBe("CDP_UNAVAILABLE");
+      expect(evaluateCalls).toBe(1);
+      expect(attachCalls).toBe(0);
+    } finally {
+      cdpController.hasConnection = originalHasConnection;
+      cdpController.detach = originalDetach;
+      cdpController.attach = originalAttach;
+      cdpController.evaluate = originalEvaluate;
+      const activeAfter = sessionManager.getActive();
+      if (activeAfter?.sessionId === running.sessionId) {
+        sessionManager.stop(running.sessionId);
+      }
+    }
   });
 });
